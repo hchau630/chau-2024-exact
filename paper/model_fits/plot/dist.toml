@@ -1,0 +1,48 @@
+tag_names = ["path"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "fits", pattern = "*.pt", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+func = ["niarb.dataframe", "from_state_dict"]
+dims = { gW = ["Postsynaptic", "Presynaptic"], sigma = ["Postsynaptic", "Presynaptic"], kappa = ["Postsynaptic", "Presynaptic"] }
+coords = { gW = [["PYR", "PV"], ["PYR", "PV"]], sigma = [["PYR", "PV"], ["PYR", "PV"]], kappa = [["PYR", "PV"], ["PYR", "PV"]] }
+state_dict = { __call__ = ["torch", "load"], f = { __eval__ = "path" }, map_location = "cpu" }
+
+[[plots.__matrix__]]
+name = ["gW_dist", "sigma_dist", "kappa_dist", "dh_dist"]
+
+[[plots.__include__]]
+func = "displot"
+x = "value"
+height = 2
+element = "step"
+fill = false
+common_bins = false
+facet_kws = { sharex = false }
+
+[[plots.__include__]]
+name = "gW_dist"
+query = "variable == 'gW'"
+row = "Postsynaptic"
+col = "Presynaptic"
+mapping = { value = "Connectivity strength" }
+
+[[plots.__include__]]
+name = "sigma_dist"
+query = "variable == 'sigma'"
+row = "Postsynaptic"
+col = "Presynaptic"
+mapping = { value = 'Connectivity width ($\mu$m)' }
+
+[[plots.__include__]]
+name = "kappa_dist"
+query = "variable == 'kappa'"
+hue = "Postsynaptic"
+col = "Presynaptic"
+mapping = { value = 'Tuning index ($\kappa$)' }
+
+[[plots.__include__]]
+name = "dh_dist"
+query = "variable == 'dh'"
+mapping = { value = "Perturbation strength" }

@@ -1,0 +1,25 @@
+batch_size = 1
+dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
+pipeline = { __ref__ = ["fit.toml", "validation_pipeline"] }
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+modify = "gW"
+mode = "scale"
+value = { __call__ = ["builtins", "float", { __environ__ = "GAIN" }] }
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/resps_gain-{GAIN}/{filename}.pkl"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }

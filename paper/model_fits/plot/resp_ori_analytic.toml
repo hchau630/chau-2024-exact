@@ -1,0 +1,49 @@
+tag_names = ["kind", "path", "loss"]
+
+[dataframes.__matrix__]
+kind = ["model", "data"]
+path = { __call__ = ["niarb.io", "iterdir"], path = "fits", pattern = "*.pt", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+
+[[dataframes.__include__]]
+kind = "model"
+func = ["niarb.cli.run", "run"]
+dataset = { __ref__ = ["fit.toml", "dataset"], sample_target = false }
+pipeline = { __ref__ = ["fit.toml", "pipeline"] }
+state_dict = { __call__ = ["torch", "load"], f = { __eval__ = "path" }, map_location = "cpu" }
+query = "distance > 25"
+rolling = { rel_ori = [{ __array__ = "0:90:10j" }, 25.0] }
+
+[[dataframes.__include__]]
+kind = "data"
+func = ["niarb.viz", "sample_df"]
+df = { __call__ = ["niarb.io", "load_data"], paths = "data/ori.pkl" }
+y = "dr"
+yerr = "dr_se"
+index = "index"
+errorbar = "sd"
+
+[[plots]]
+name = { __format__ = "resp_ori_analytic_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "rel_ori"
+y = "dr"
+style = "kind"
+style_order = ["model", "data"]
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+color = "black"
+legend_loc = "upper right"
+legend_title = false
+facet_kws = { sharey = false, legend_out = false }
+errordim = ["loss", "index"]
+errorbar = "sd"
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+dr = '$\Delta$ response'
+rel_ori = '$\Delta$ ori. pref. (deg)'

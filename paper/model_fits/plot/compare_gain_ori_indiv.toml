@@ -1,0 +1,37 @@
+tag_names = ["gain", "path", "loss"]
+
+[dataframes.__matrix__]
+gain = ["1", { __environ__ = "GAIN" }]
+path = { __call__ = ["niarb.io", "iterdir"], path = "fits", pattern = "*.pt", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path)" }
+func = ["niarb.io", "load_data"]
+paths = { __format__ = "runs/resps_gain-{gain}/{path}.pkl", gain = { __eval__ = "gain" }, path = { __eval__ = "path" } }
+query = "distance > 25"
+cuts = { rel_ori = { __array__ = "-5:96:10" } }
+
+[[plots]]
+name = { __format__ = "compare_gain_{GAIN}_ori_indiv_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "rel_ori"
+y = "dr"
+hue = "gain"
+hue_order = ["1", { __environ__ = "GAIN" }]
+style = "cell_type"
+col = "loss"
+col_wrap = 5
+errorbar = "se"
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+legend_loc = "upper right"
+facet_kws = { sharey = false, legend_out = false }
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+gain = "Gain"
+dr = '$\Delta$ response'
+rel_ori = '$\Delta$ ori. pref. (deg)'
+cell_type = "Cell type"

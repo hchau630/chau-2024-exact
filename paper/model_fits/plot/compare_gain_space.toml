@@ -1,0 +1,37 @@
+tag_names = ["gain", "path", "loss"]
+
+[dataframes.__matrix__]
+gain = ["1", { __environ__ = "GAIN" }]
+path = { __call__ = ["niarb.io", "iterdir"], path = "fits", pattern = "*.pt", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path)" }
+func = ["niarb.io", "load_data"]
+paths = { __format__ = "runs/resps_gain-{gain}/{path}.pkl", gain = { __eval__ = "gain" }, path = { __eval__ = "path" } }
+query = "distance > 25"
+cuts = { distance = { __array__ = "25:643:2" } }
+# rolling = { distance = [{ __array__ = "33.7:642.1:40j" }, 60.0] }
+
+[[plots]]
+name = { __format__ = "compare_gain_{GAIN}_space_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "distance"
+y = "dr"
+hue = "gain"
+hue_order = ["1", { __environ__ = "GAIN" }]
+errordim = "loss"
+# errorbar = "pi"
+errorbar = "sd"
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+palette = ["#1F77B4", "#89C8ED"]
+legend_loc = "upper right"
+facet_kws = { sharey = false, legend_out = false }
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+gain = "Gain"
+dr = '$\Delta$ response'
+distance = 'Distance ($\mu$m)'

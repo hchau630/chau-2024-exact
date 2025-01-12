@@ -1,0 +1,35 @@
+tag_names = ["path", "loss"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/resps_gain-1", pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_data"]
+paths = { __eval__ = "path" }
+query = "distance > 25"
+cuts = { rel_ori = { __array__ = "-5:96:10" } }
+# rolling = { rel_ori = [{ __array__ = "0:90:10j" }, 25.0] }
+
+[[plots]]
+name = { __format__ = "compare_EI_ori_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "rel_ori"
+y = "dr"
+hue = "cell_type"
+hue_order = ["PYR", "PV"]
+errordim = "loss"
+# errorbar = "pi"
+errorbar = "sd"
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+legend_loc = "upper right"
+facet_kws = { sharey = false, legend_out = false }
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+cell_type = "Cell type"
+dr = '$\Delta$ response'
+rel_ori = '$\Delta$ ori. pref. (deg)'
