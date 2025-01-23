@@ -1,3 +1,6 @@
+# misc
+paper/model_fits/slurm
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
