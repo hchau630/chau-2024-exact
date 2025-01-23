@@ -22,7 +22,7 @@ def main():
 
     if args.out:
         with open(args.out, "w") as f:
-            f.write(f"Command: {sys.argv}\nrho: {rho}")
+            f.write(f"Command: {' '.join(sys.argv)}\nrho: {rho}")
 
 
 if __name__ == "__main__":

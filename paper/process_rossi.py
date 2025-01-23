@@ -1,4 +1,5 @@
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -7,6 +8,7 @@ import numpy as np
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("dir", type=Path)
+    parser.add_argument("--out", "-o", type=Path)
     args = parser.parse_args()
 
     data = {}
@@ -17,7 +19,9 @@ def main():
 
     for filename, name in [("EE", "rEX"), ("EI", "rIN")]:
         out = np.stack([data["rbins"], data[name].mean(axis=1)], axis=1)
-        np.savetxt(args.dir / f"{filename}.csv", out, delimiter=",")
+        if args.out:
+            header = f"command: {' '.join(sys.argv)}"
+            np.savetxt(args.out / f"{filename}.csv", out, delimiter=",", header=header)
 
 
 if __name__ == "__main__":
