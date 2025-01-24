@@ -49,9 +49,10 @@ name = "phase_diagram_reg"
 func = "lmplot"
 x = '$w_\mathrm{EE} - |w_\mathrm{II}|$'
 y = '$\mathrm{det}(\mathbf{W})$'
+stat = true
 ylim = [0, { __const__ = "None" }]
-height = 1.75
-aspect = 1.15
+height = 2
+aspect = 1.4
 
 [[plots]]
 name = "ori_phase_diagram"

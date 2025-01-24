@@ -10,11 +10,13 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.axes import Axes
 from matplotlib.text import Text
+from matplotlib.offsetbox import AnchoredText
 import pandas as pd
 from pandas import DataFrame
 from scipy import stats
 import seaborn as sns
 from seaborn import FacetGrid
+import statsmodels.api as sm
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +65,9 @@ def figplot(
         mapping = {}
 
     if isinstance(func, str):
-        func = {"relplot": relplot, "displot": displot}.get(func, getattr(sns, func))
+        func = {"relplot": relplot, "lmplot": lmplot, "displot": displot}.get(
+            func, getattr(sns, func)
+        )
     elif isinstance(func, Sequence):
         if len(func) != 2:
             raise ValueError("func must be a sequence of length 2.")
@@ -100,6 +104,9 @@ def figplot(
         if "x" not in kwargs or "y" not in kwargs:
             raise ValueError("stat=True requires 'x' and 'y' to be specified.")
 
+        statplot = {sns.catplot: catstatplot, lmplot: lmstatplot}.get(func)
+        if statplot is None:
+            raise ValueError(f"stat=True is not supported for {func}.")
         g.map_dataframe(statplot, x=kwargs["x"], y=kwargs["y"], **(stat_kws or {}))
 
     # more compact subplot titles
@@ -156,6 +163,38 @@ def relplot(data=None, *, x=None, **kwargs):
     return sns.relplot(data=data, x=x, **kwargs)
 
 
+def lmplot(data=None, *, x=None, **kwargs):
+    if _is_interval_dtype(data[x].dtype):
+        data = data.copy()
+        data[x] = pd.IntervalIndex(data[x]).mid
+
+    return sns.lmplot(data=data, x=x, **kwargs)
+
+
+def lmstatplot(
+    data=None,
+    *,
+    x=None,
+    y=None,
+    loc="upper right",
+    alpha=0.5,
+    color=None,
+    label=None,
+    marker=None,
+    **kwargs,
+):
+    fit = sm.OLS(data[y], sm.add_constant(data[x])).fit()
+    stats = [
+        f"Slope: {fit.params[1]:.1e}$\pm${fit.bse[1]:.1e}",
+        f"Intercept: {fit.params[0]:.1e}$\pm${fit.bse[0]:.1e}",
+        f"$R^2$: {fit.rsquared:.2g}, P-value: {fit.pvalues[1]:.1e}",
+    ]
+    text = AnchoredText("\n".join(stats), loc, **kwargs)
+    text.patch.set_alpha(alpha)
+    plt.gca().add_artist(text)
+    return text
+
+
 def displot(data=None, *, kind="hist", legend=True, **kwargs):
     kind = histplot if kind == "hist" else getattr(sns, f"{kind}plot")
 
@@ -194,7 +233,7 @@ def histplot(data=None, *, x=None, color=None, label=None, bins="auto", **kwargs
     return sns.histplot(data, x=x, color=color, label=label, bins=bins, **kwargs)
 
 
-def statplot(
+def catstatplot(
     data: DataFrame | None = None,
     *,
     x: str | None = None,
