@@ -18,8 +18,8 @@ template = '{variable}[{Postsynaptic},{Presynaptic}]'
 '$\kappa_\mathrm{EI}\kappa_\mathrm{IE}$' = '`kappa[PYR,PV]` * `kappa[PV,PYR]`'
 '$\tilde{w}_\mathrm{EI}\tilde{w}_\mathrm{IE}$' = '`gW[PYR,PV]` * `gW[PV,PYR]` * `kappa[PYR,PV]` * `kappa[PV,PYR]`'
 '$\tilde{w}_\mathrm{EI}\tilde{w}_\mathrm{IE} - \tilde{w}_\mathrm{EE}\tilde{w}_\mathrm{II}$' = '''
-0.25 * (`gW[PYR,PV]` * `gW[PV,PYR]` * `kappa[PYR,PV]` * `kappa[PV,PYR]` - `gW[PYR,PYR]` * `gW[PV,PV]` * `kappa[PYR,PYR]` * `kappa[PV,PV]`)'''
-'$\tilde{w}_\mathrm{EE}$' = '0.5 * `gW[PYR,PYR]` * `kappa[PYR,PYR]`'
+`gW[PYR,PV]` * `gW[PV,PYR]` * `kappa[PYR,PV]` * `kappa[PV,PYR]` - `gW[PYR,PYR]` * `gW[PV,PV]` * `kappa[PYR,PYR]` * `kappa[PV,PV]`'''
+'$\tilde{w}_\mathrm{EE}$' = '`gW[PYR,PYR]` * `kappa[PYR,PYR]`'
 
 [dataframes.__include__.df]
 __call__ = ["niarb.dataframe", "from_state_dict"]
@@ -90,4 +90,3 @@ aspect = 1.15
 element = "step"
 fill = false
 bins = ["zero", 10]
-
