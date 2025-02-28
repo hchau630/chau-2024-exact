@@ -175,7 +175,7 @@ def plot_space_phases(
         det: \det(W) - \tr(W(I - \rho^{\pm1}\tilde{S}^{-1}))
     where \tilde{S} = diag([\rho^{-1}, \rho])
     """
-    if not coord in {"I-W", "W"}:
+    if coord not in {"I-W", "W"}:
         raise ValueError(f"Invalid value for argument `coord`: {coord}")
 
     if isinstance(rho, Number):

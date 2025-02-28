@@ -1,7 +1,10 @@
 from functools import partial
+from collections.abc import Callable
+from typing import Any
 
 import numpy as np
 import torch
+from torch import Tensor
 
 from niarb.special.resolvent import laplace_r
 
@@ -10,25 +13,35 @@ def func(d, r, l0, l1, z, **kwargs):
     return (laplace_r(d, l1, r, **kwargs) - z * laplace_r(d, l0, r, **kwargs)).real
 
 
-def bisect(func, a, b, args=(), tol=1e-8):
+def bisect(
+    func: Callable[[Tensor, *tuple[Any]], Tensor],
+    a: Tensor,
+    b: Tensor,
+    args: tuple = (),
+    tol: float | None = None,
+) -> Tensor:
     """
     Find a root of a function using the bisection method.
 
     Args:
-        func: callable
-        a: Tensor
-        b: Tensor
-        tol: float
+        func: Function to find the root of
+        a: Lower bound of root
+        b: Upper bound of root
+        tol (optional): Tolerance for root
 
     Returns:
-        Tensor
+        Root of the function between a and b. If a and b have the same sign, the output
+        is nan.
 
     """
     if (b <= a).any():
         raise ValueError("b must be greater than a")
 
+    if tol is None:
+        tol = 1e-8 if a.dtype == torch.double and b.dtype == torch.double else 1e-6
+
     a, b, *args = torch.broadcast_tensors(a, b, *args)
-    out = torch.empty_like(a)
+    out = torch.full_like(a, torch.nan)
     fa, fb = func(a, *args), func(b, *args)
     valid = fa * fb < 0
     a, b, fa, fb = a[valid], b[valid], fa[valid], fb[valid]
@@ -44,18 +57,20 @@ def bisect(func, a, b, args=(), tol=1e-8):
     return out
 
 
-def find_root(d, l0, l1, z, n=1):
+def find_root(
+    d: int, l0: np.ndarray, l1: np.ndarray, z: np.ndarray, n: int = 1
+) -> np.ndarray:
     """
     Find the nth zero crossing of the function
     $$G_d(r; \lambda_1) / G_d(r; \lambda_0) = z$$
     If l0 and l1 are real, l0 must be less than l1.
 
     Args:
-        d: int
+        d: Number of spatial dimensions
         l0: ndarray with shape (*)
         l1: ndrray with shape (*)
         z: ndarray with shape (**, *)
-        n (optional): int
+        n (optional): Which zero crossing to find
 
     Returns:
         ndarray with shape (**, *) of the nth zero crossing of the function
