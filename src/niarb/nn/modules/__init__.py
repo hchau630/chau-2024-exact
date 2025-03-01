@@ -2,6 +2,7 @@ from .analysis import *
 from .containers import *
 from .module import *
 from .functions import *
+from .kernels import *
 from .activations import *
 from .criteria import *
 from .v1 import V1
