@@ -50,7 +50,7 @@ class GaussianKernel(Kernel):
 
     def kernel(self, x: Tensor, y: Tensor, idx_x: Tensor, idx_y: Tensor) -> Tensor:
         sigma = self.sigma[idx_x, idx_y]
-        return torch.exp(-diff(x, y) ** 2 / (2 * sigma**2))
+        return torch.exp(-diff(x, y).norm(dim=-1) ** 2 / (2 * sigma**2))
 
 
 class TuningKernel(Kernel):

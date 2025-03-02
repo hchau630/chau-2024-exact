@@ -17,6 +17,7 @@ def discretize(
     x: frame.ParameterFrame,
     ndim: int | None = None,
     dim: int | Iterable[int] = (),
+    mul_dV: bool = True,
     **kwargs,
 ) -> torch.Tensor:
     """Discretize a kernel function.
@@ -27,6 +28,7 @@ def discretize(
         ndim (optional): Number of non-batch dimensions (assumed to be trailing).
         dim (optional): Circulant dimensions, i.e. x is a regular,
             periodic grid along those dimensions. This is used to optimize the computation of weights.
+        mul_dV (optional): If True, multiply kernel by dV.
         kwargs: keyword arguments passed to kernel
 
     Returns:
@@ -48,8 +50,10 @@ def discretize(
     if len(dim) < ndim:
         dims = [(-(ndim - len(dim)), None), (-ndim, None)]
         x_post, x_pre = frame.meshgrid(x_post, x_pre, dims=dims, sparse=True)
-    W = kernel(x_post, x_pre, **kwargs) * x_pre.data["dV"]  # (*, *shape[~dim], *shape)
-    # W = kernel(x_post, x_pre, **kwargs) * x_post.data["dV"]  # (*, *shape[~dim], *shape)
+    W = kernel(x_post, x_pre, **kwargs)  # (*, *shape[~dim], *shape)
+    if mul_dV:
+        W = W * x_pre.data["dV"]  # (*, *shape[~dim], *shape)
+        # W = W * x_post.data["dV"]  # (*, *shape[~dim], *shape)
     if len(dim) > 0:
         W = circulant.as_tensor(W, cdim=dim, ndim=ndim)
 
@@ -90,7 +94,7 @@ def sparsify(
         raise ValueError(f"tolerance must be non-negative, but got {tol}.")
 
     if isinstance(W, circulant.CirculantTensor):
-        W = W.dense(keep_shape=False)
+        W = W.dense()
     logger.debug(f"{W.shape=}")
 
     aW = W.abs()
@@ -150,7 +154,7 @@ def sample_log_normal(W: torch.Tensor, std: float | torch.Tensor) -> torch.Tenso
 
     """
     if isinstance(W, circulant.CirculantTensor):
-        W = W.dense(keep_shape=False)
+        W = W.dense()
     logger.debug(f"{W.shape=}")
 
     return W.sign() * random.log_normal(W, W * std, validate_args=False)

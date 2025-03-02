@@ -10,7 +10,7 @@ from niarb.tensors import periodic
 def x():
     return frame.ParameterFrame(
         {
-            "space": torch.tensor([0.0, 1.0, 2.0, 3.0]),
+            "space": torch.tensor([[0.0], [1.0], [2.0], [3.0]]),
             "ori": periodic.tensor(
                 [[-45.0], [0.0], [45.0], [90.0]], extents=[(-90.0, 90.0)]
             ),
@@ -23,7 +23,7 @@ def x():
 def y():
     return frame.ParameterFrame(
         {
-            "space": torch.tensor([0.0, 2.0, 1.0, 5.0]),
+            "space": torch.tensor([[0.0], [2.0], [1.0], [5.0]]),
             "ori": periodic.tensor(
                 [[0.0], [90.0], [45.0], [-45.0]], extents=[(-90.0, 90.0)]
             ),

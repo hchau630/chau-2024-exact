@@ -1,7 +1,7 @@
 from itertools import product
 from collections.abc import Sequence
-from contextlib import nullcontext
 import math
+from math import exp
 import copy
 
 import pytest
@@ -263,6 +263,51 @@ class TestV1:
             expected = expected / N_osi
 
         torch.testing.assert_close(out, expected)
+
+    def test_weights_sparse(self):
+        prob_kernel = nn.GaussianKernel(
+            torch.tensor([[100.0, 200.0], [200.0, 100.0]]), ["space", "cell_type"]
+        )
+        with random.set_seed(0):
+            model = nn.V1(
+                ["cell_type", "space"],
+                cell_types=(CellType.PYR, CellType.PV),
+                prob_kernel=prob_kernel,
+            )
+        x = neurons.as_grid(
+            2, (4,), cell_types=(CellType.PYR, CellType.PV), space_extent=(400,)
+        )
+        M = 50000
+        x_ = frame.stack([x] * M)
+        with random.set_seed(0):
+            out = model(x_, output="weight", ndim=2)
+
+        prob1 = torch.tensor(
+            [
+                [1.0, exp(-0.5), exp(-2.0), exp(-0.5)],
+                [exp(-0.5), 1.0, exp(-0.5), exp(-2.0)],
+                [exp(-2.0), exp(-0.5), 1.0, exp(-0.5)],
+                [exp(-0.5), exp(-2.0), exp(-0.5), 1.0],
+            ]
+        )
+        prob2 = torch.tensor(
+            [
+                [1.0, exp(-0.125), exp(-0.5), exp(-0.125)],
+                [exp(-0.125), 1.0, exp(-0.125), exp(-0.5)],
+                [exp(-0.5), exp(-0.125), 1.0, exp(-0.125)],
+                [exp(-0.125), exp(-0.5), exp(-0.125), 1.0],
+            ]
+        )
+        prob = torch.stack([torch.stack([prob1, prob2]), torch.stack([prob2, prob1])])
+        prob = prob.movedim(1, 2)
+        sem = (prob * (1 - prob) / M).sqrt()
+        out_prob = out.count_nonzero(dim=0) / M
+        assert (out_prob >= prob - 2.5 * sem).all()
+        assert (out_prob <= prob + 2.5 * sem).all()
+
+        model.prob_kernel = None
+        expected = model(x, output="weight", ndim=2).dense()
+        torch.testing.assert_close(out.mean(dim=0), expected, atol=1e-5, rtol=5e-2)
 
     @pytest.mark.parametrize(
         "f, variables, d, osi_func, osi_prob, sigma_symmetry, mode",
