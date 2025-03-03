@@ -6,6 +6,10 @@ from torch import Tensor
 __all__ = [
     "Identity",
     "Pow",
+    "Add",
+    "Sub",
+    "Mul",
+    "TrueDiv",
     "Compose",
     "Match",
 ]

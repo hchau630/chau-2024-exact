@@ -1,4 +1,5 @@
 from collections.abc import Callable, Sequence
+from numbers import Number
 from itertools import chain
 
 import torch
@@ -35,18 +36,18 @@ class Kernel(Function):
 
 
 class MatrixKernel(Kernel):
-    def __init__(self, matrix: Tensor, *args, **kwargs):
+    def __init__(self, matrix: Tensor | Sequence[Sequence[Number]], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.matrix = matrix
+        self.register_buffer("matrix", torch.as_tensor(matrix), persistent=False)
 
     def kernel(self, idx_x: Tensor, idx_y: Tensor) -> Tensor:
         return self.matrix[idx_x, idx_y]
 
 
 class GaussianKernel(Kernel):
-    def __init__(self, sigma: Tensor, *args, **kwargs):
+    def __init__(self, sigma: Tensor | Sequence[Sequence[Number]], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.sigma = sigma
+        self.register_buffer("sigma", torch.as_tensor(sigma), persistent=False)
 
     def kernel(self, x: Tensor, y: Tensor, idx_x: Tensor, idx_y: Tensor) -> Tensor:
         sigma = self.sigma[idx_x, idx_y]
@@ -54,9 +55,9 @@ class GaussianKernel(Kernel):
 
 
 class TuningKernel(Kernel):
-    def __init__(self, kappa: Tensor, *args, **kwargs):
+    def __init__(self, kappa: Tensor | Sequence[Sequence[Number]], *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.kappa = kappa
+        self.register_buffer("kappa", torch.as_tensor(kappa), persistent=False)
 
     def kernel(
         self, x: PeriodicTensor, y: PeriodicTensor, idx_x: Tensor, idx_y: Tensor
