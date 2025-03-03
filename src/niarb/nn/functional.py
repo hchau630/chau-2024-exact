@@ -1,6 +1,8 @@
 import functools
+from typing import overload
 
 import torch
+from torch import Tensor
 import numpy as np
 
 from niarb.tensors.periodic import PeriodicTensor
@@ -8,9 +10,32 @@ from niarb.tensors.periodic import PeriodicTensor
 sqrtpi = torch.pi**0.5
 
 
+@overload
+def diff(x: PeriodicTensor, y: PeriodicTensor) -> PeriodicTensor: ...
+
+
+@overload
+def diff(x: PeriodicTensor, y: Tensor) -> PeriodicTensor: ...
+
+
+@overload
+def diff(x: Tensor, y: PeriodicTensor) -> PeriodicTensor: ...
+
+
+@overload
+def diff(x: Tensor, y: Tensor) -> Tensor: ...
+
+
 def diff(x, y):
-    """
-    Returns y - x. If x or y is a PeriodicTensor, group addition is used.
+    """Compute y - x. If x or y is a PeriodicTensor, group addition is used.
+
+    Args:
+        x: First tensor
+        y: Second tensor
+
+    Returns:
+        Difference tensor
+
     """
     is_periodic = isinstance(x, PeriodicTensor) or isinstance(y, PeriodicTensor)
     inv = is_periodic and not isinstance(x, PeriodicTensor)

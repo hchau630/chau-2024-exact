@@ -15,9 +15,11 @@ import tdfl
 from niarb import special, ft, nn, weights, linalg, numerics, exceptions, utils, random
 from niarb.nn import functional
 from niarb.nn.modules import frame
+from niarb.nn.modules.frame import ParameterFrame
 from niarb.cell_type import CellType
 from niarb.tensors import categorical
 from niarb.tensors.periodic import PeriodicTensor
+from niarb.tensors.circulant import CirculantTensor
 
 logger = logging.getLogger(__name__)
 
@@ -99,8 +101,8 @@ def UV_decomposition(W: Tensor, sigma: Tensor) -> tuple[Tensor, Tensor]:
 
 def resolvent(
     l: Number,
-    x: frame.ParameterFrame,
-    y: frame.ParameterFrame,
+    x: ParameterFrame,
+    y: ParameterFrame,
     W: Tensor,
     sigma: Tensor,
     kappa: Tensor | float,
@@ -350,6 +352,7 @@ class V1(torch.nn.Module):
         init_stable: bool = False,
         mode: str = "analytical",
         approx_order: int = 2,
+        prob_kernel: Callable[[ParameterFrame, ParameterFrame], Tensor] | None = None,
         N_synapses: float | int = None,
         W_std: float = 0.0,
         seed: int | None = None,
@@ -411,8 +414,12 @@ class V1(torch.nn.Module):
             mode (optional): {'analytical', 'matrix', 'matrix_approx', 'numerical'}.
                 Method for computing the perturbation response.
             approx_order (optional): Order of approximation for matrix_approx mode.
+            prob_kernel (optional): Kernel function for computing connection probabilities. If None,
+                the network is all-to-all connected. Unused if mode == 'analytical'. If not None,
+                N_synapses must be None.
             N_synapses (optional):
                 Expected number of synapses per neuron, must be non-negative. If None, connectivity is dense.
+                If not None, prob_kernel must be None.
             W_std (optional). Standard deviation (as a fraction of the mean) of connection weight distribution.
             seed (optional):
                 Random seed for generating connection weight matrix, only relevant if N_synapses is not None or W_std > 0.
@@ -459,6 +466,11 @@ class V1(torch.nn.Module):
 
         if W_std < 0.0:
             raise ValueError(f"W_std must be non-negative, but got {W_std=}.")
+
+        if prob_kernel is not None and N_synapses is not None:
+            raise ValueError(
+                "prob_kernel and N_synapses cannot be specified simultaneously."
+            )
 
         cell_types = tuple(
             CellType[ct] if isinstance(ct, str) else ct for ct in cell_types
@@ -536,6 +548,7 @@ class V1(torch.nn.Module):
         self.autapse = autapse
         self.mode = mode
         self.approx_order = approx_order
+        self.prob_kernel = prob_kernel
         self.N_synapses = N_synapses
         self.W_std = W_std
         self.seed = seed
@@ -692,8 +705,8 @@ class V1(torch.nn.Module):
     def resolvent(
         self,
         l: Number,
-        x: frame.ParameterFrame,
-        y: frame.ParameterFrame,
+        x: ParameterFrame,
+        y: ParameterFrame,
         with_gain: bool = True,
         **kwargs,
     ) -> Tensor:
@@ -759,7 +772,7 @@ class V1(torch.nn.Module):
 
     def forward(
         self,
-        x: frame.ParameterFrame,
+        x: ParameterFrame,
         output: str = "response",
         ndim: int = 1,
         in_var: str = "dh",
@@ -769,7 +782,7 @@ class V1(torch.nn.Module):
         check_circulant: bool = True,
         assert_finite: bool = True,
         to_dataframe: bool = True,
-    ) -> frame.ParameterFrame | tdfl.DataFrame | Tensor:
+    ) -> ParameterFrame | tdfl.DataFrame | Tensor:
         """Compute perturbation response or connectivity weights of the model.
 
         Output is computed for each set of model parameters, i.e. it is equivalent
@@ -914,7 +927,15 @@ class V1(torch.nn.Module):
                 kernel, x.data[keys], ndim=ndim, dim=cdim
             )  # (*bshape, *, *shape, *shape)
 
-            if self.N_synapses is not None:
+            if self.prob_kernel is not None:
+                # Note: this is non-differentiable.
+                prob = weights.discretize(
+                    self.prob_kernel, x.data[keys], ndim=ndim, mul_dV=False
+                )
+                if isinstance(W, CirculantTensor):
+                    W = W.dense()
+                W = W / prob * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
+            elif self.N_synapses is not None:
                 # Note: this is currently non-differentiable.
                 mean_p = self.N_synapses / math.prod(x.shape[-ndim:])
                 with random.set_seed(self.seed):
@@ -930,6 +951,11 @@ class V1(torch.nn.Module):
 
             if output == "weight":
                 return W
+
+            if ndim > 1 and not isinstance(W, CirculantTensor):
+                raise NotImplementedError(
+                    "Currently only supports 1D inputs for non-circulant tensors."
+                )
 
             dh = x.data[in_var]  # (*, *shape)
             if "cell_type" in self.variables:
