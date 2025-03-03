@@ -23,12 +23,27 @@ x_keys = ["cell_type"]
 __call__ = ["niarb.nn", "Mul"]
 
 [pipeline.model.prob_kernel.g.f]
+__call__ = ["niarb.nn", "PiecewiseKernel"]
+radius = [
+    [254.0, 194.0],
+    [200.0, 254.0],
+]
+x_keys = ["space", "cell_type"]
+
+[pipeline.model.prob_kernel.g.f.f]
 __call__ = ["niarb.nn", "GaussianKernel"]
 sigma = [
     [127.0, 97.0],
     [100.0, 127.0],
 ]
-x_keys = ["space", "cell_type"]
+
+[pipeline.model.prob_kernel.g.f.g]
+__call__ = ["niarb.nn", "LaplaceKernel"]
+d = 2
+sigma = [
+    [175.0, 128.0],
+    [172.0, 175.0],
+]
 
 [pipeline.model.prob_kernel.g.g]
 __call__ = ["niarb.nn", "TuningKernel"]

@@ -74,10 +74,10 @@ class GaussianKernel(RadialKernel):
 
 
 class LaplaceKernel(RadialKernel):
-    def __init__(self, d: int, sigma: Tensor, *args, **kwargs):
+    def __init__(self, d: int, sigma: Tensor | Sequence[Sequence[Number]], *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.d = d
-        self.sigma = sigma
+        self.register_buffer("sigma", torch.as_tensor(sigma), persistent=False)
 
     def kernel(self, r: Tensor, idx_x: Tensor, idx_y: Tensor) -> Tensor:
         sigma = self.sigma[idx_x, idx_y]
@@ -89,7 +89,7 @@ class PiecewiseKernel(RadialKernel):
         self,
         f: RadialKernel,
         g: RadialKernel,
-        radius: Tensor,
+        radius: Tensor | Sequence[Sequence[Number]],
         *args,
         continuous: bool = True,
         **kwargs,
@@ -97,7 +97,7 @@ class PiecewiseKernel(RadialKernel):
         super().__init__(*args, **kwargs)
         self.f = f
         self.g = g
-        self.radius = radius
+        self.register_buffer("radius", torch.as_tensor(radius), persistent=False)
         self.continuous = continuous
 
     def kernel(self, r: Tensor, idx_x: Tensor, idx_y: Tensor) -> Tensor:
