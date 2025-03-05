@@ -49,7 +49,7 @@ class Dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         neurons: ParameterFrame | dict,
-        perturbations: Tensor | Sequence | dict,
+        perturbations: Tensor | Sequence | dict | None = None,
         data: Sequence[pd.DataFrame] = (),
         N_instantiations: int = 1,
         window: float | Sequence[float] = torch.inf,
@@ -114,7 +114,7 @@ class Dataset(torch.utils.data.Dataset):
             self.yerr = torch.cat(self.yerr)
 
         self.neurons = neurons
-        if isinstance(perturbations, (Tensor, Sequence)):
+        if perturbations is None or isinstance(perturbations, (Tensor, Sequence)):
             self.tags, self.perturbations = ParameterFrame({}), perturbations
         else:
             self.tags, self.perturbations = _get_tags_and_configs(**perturbations)
@@ -156,19 +156,20 @@ class Dataset(torch.utils.data.Dataset):
             with random.set_seed(seed):
                 x = sample_neurons(**self.neurons)  # (*shape)
 
-        if isinstance(self.perturbations, Tensor):
-            dh = self.perturbations
-        else:
-            with random.set_seed(seed):
-                dh = [perturbation.sample(x, **p) for p in self.perturbations]
-            dh = torch.stack(dh)
+        if self.perturbations is not None:
+            if isinstance(self.perturbations, Tensor):
+                dh = self.perturbations
+            else:
+                with random.set_seed(seed):
+                    dh = [perturbation.sample(x, **p) for p in self.perturbations]
+                dh = torch.stack(dh)
 
-        x = x.unsqueeze(0)  # (1, *shape)
-        x["dh"] = dh  # (N_stims, *shape)
-        x["mask"] = torch.ones_like(x["dh"], dtype=torch.bool)
+            x = x.unsqueeze(0)  # (1, *shape)
+            x["dh"] = dh  # (N_stims, *shape)
+        x["mask"] = torch.ones(x.shape, dtype=torch.bool)
 
         if "space" in x:
-            if self.window != torch.inf:
+            if self.perturbations is not None and self.window != torch.inf:
 
                 def func(xi):
                     cmean = xi["space"][xi["dh"] != 0].cmean()  # (D,)
