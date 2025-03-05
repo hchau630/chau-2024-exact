@@ -7,6 +7,7 @@ import pandas as pd
 import hyclib as lib
 
 from .containers import ParameterDict
+from niarb.tensors.categorical import CategoricalTensor
 
 
 class ParameterFrame(ParameterDict):
@@ -297,11 +298,38 @@ class ParameterFrame(ParameterDict):
 
         return ParameterFrame(d, ndim=ndim)
 
-    def to_framelike(self, cls=pd.DataFrame, as_index=True, to_numpy=True, **kwargs):
-        if not as_index and self.ndim > 1:
+    def to_framelike(
+        self,
+        cls=pd.DataFrame,
+        keep_indices=True,
+        as_index=True,
+        to_numpy=True,
+        **kwargs,
+    ):
+        """Convert to a DataFrame-like object.
+
+        Args:
+            cls (optional): Type of the resulting DataFrame-like object.
+            keep_indices (optional): Whether or not to keep track of the indices
+                of the original multi-dimensional ParameterFrame. If the original
+                ParameterFrame is one-dimensional, then the indices are discarded
+                regardless.
+            as_index (optional): If True, sets the indices as an 'index' attribute.
+                Otherwise, adds columns 'idx[0]', 'idx[1]', ... to the resulting
+                DataFrame-like object. Ignored if keep_indices=False.
+            to_numpy (optional): Whether to convert tensors to numpy arrays. If
+                cls is pd.DataFrame, then this conversion is performed regardless.
+            **kwargs: Additional keyword arguments to pass to cls.
+
+        Returns:
+            DataFrame-like object.
+
+        """
+        if keep_indices and not as_index and self.ndim > 1:
             if "idx" in self:
                 raise ValueError(
-                    "ParameterFrame must not contain the column 'idx' if as_index=False and ndim > 1."
+                    "ParameterFrame must not contain the column 'idx' if "
+                    "keep_indices=True, as_index=False, and ndim > 1."
                 )
 
             df = self.copy()
@@ -314,12 +342,21 @@ class ParameterFrame(ParameterDict):
             df = self
 
         df = df.reshape(-1).explode(dim=1)
-        df = cls(
-            {k: v.detach().cpu().numpy() if to_numpy else v for k, v in df.items()},
-            **kwargs,
-        )
+        if cls is pd.DataFrame:
+            # take advantage of the more memory-efficient categorical dtype
+            df = {
+                k: (
+                    v.pandas(force=True)
+                    if isinstance(v, CategoricalTensor)
+                    else v.numpy(force=True)
+                )
+                for k, v in df.items()
+            }
+        else:
+            df = {k: v.numpy(force=True) if to_numpy else v for k, v in df.items()}
+        df = cls(df, **kwargs)
 
-        if as_index and self.ndim > 1:
+        if keep_indices and as_index and self.ndim > 1:
             df.index = pd.MultiIndex.from_product([np.arange(s) for s in self.shape])
 
         return df

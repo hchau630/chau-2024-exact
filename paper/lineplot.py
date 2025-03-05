@@ -560,7 +560,7 @@ def compare(
         approx_model.approx_order = approx_order
 
     with torch.inference_mode():
-        W = analytic_model(x, output="weight", ndim=x.ndim)
+        W = analytic_model(x, output="weight", ndim=x.ndim, to_dataframe=False)
         radius = torch.linalg.eigvals(W).abs().max()
         # _, radius = model.spectral_summary()  # slightly less accurate but faster
         print(f'Jacobian abscissa: {model.spectral_summary(kind="J").abscissa}')

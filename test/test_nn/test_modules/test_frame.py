@@ -1,10 +1,14 @@
 import contextlib
 
 import pytest
+import pandas as pd
+import numpy as np
 import torch
 import hyclib as lib
+import tdfl
 
 from niarb.nn.modules import frame
+from niarb.tensors import categorical
 
 
 @pytest.fixture
@@ -350,3 +354,82 @@ def test_unsqueeze(df, dim, expected):
     out = df.unsqueeze(dim)
     for k, v in out._items():
         assert v.shape == expected[k]
+
+
+@pytest.mark.parametrize("cls", ["tdfl", "pd"])
+@pytest.mark.parametrize("keep_indices", [True, False])
+@pytest.mark.parametrize("as_index", [True, False])
+@pytest.mark.parametrize("to_numpy", [True, False])
+def test_to_framelike(cls, keep_indices, as_index, to_numpy):
+    a = torch.tensor([[1.0], [2.0]])
+    b = torch.tensor([[[3.0, 4.0], [5.0, 6.0], [7.0, 8.0]]], requires_grad=True)
+    c = categorical.tensor([[0, 1, 2], [1, 0, 2]], categories=("d", "e", "f"))
+
+    df = frame.ParameterFrame({"a": a, "b": b, "c": c}, ndim=2)
+    cls = tdfl.DataFrame if cls == "tdfl" else pd.DataFrame
+    out = df.to_framelike(cls, keep_indices, as_index, to_numpy)
+
+    assert isinstance(out, cls)
+
+    if cls is pd.DataFrame:
+        expected = {
+            "a": [1.0, 1.0, 1.0, 2.0, 2.0, 2.0],
+            "b[0]": [3.0, 5.0, 7.0, 3.0, 5.0, 7.0],
+            "b[1]": [4.0, 6.0, 8.0, 4.0, 6.0, 8.0],
+            "c": ["d", "e", "f", "e", "d", "f"],
+        }
+        index = None
+        if keep_indices:
+            if as_index:
+                index = pd.MultiIndex.from_tuples(
+                    [(0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2)]
+                )
+            else:
+                expected["idx[0]"] = [0, 0, 0, 1, 1, 1]
+                expected["idx[1]"] = [0, 1, 2, 0, 1, 2]
+        expected = pd.DataFrame(expected, index=index)
+
+        expected["c"] = expected["c"].astype("category")
+        for k in ["a", "b[0]", "b[1]"]:
+            expected[k] = expected[k].astype("float32")
+
+        pd.testing.assert_frame_equal(out, expected)
+    elif to_numpy:
+        expected = tdfl.DataFrame(
+            {
+                "a": np.array([1.0, 1.0, 1.0, 2.0, 2.0, 2.0], dtype=np.float32),
+                "b[0]": np.array([3.0, 5.0, 7.0, 3.0, 5.0, 7.0], dtype=np.float32),
+                "b[1]": np.array([4.0, 6.0, 8.0, 4.0, 6.0, 8.0], dtype=np.float32),
+                "c": np.array(["d", "e", "f", "e", "d", "f"]),
+            }
+        )
+        if keep_indices and not as_index:
+            expected["idx[0]"] = np.array([0, 0, 0, 1, 1, 1])
+            expected["idx[1]"] = np.array([0, 1, 2, 0, 1, 2])
+        assert out.columns == expected.columns
+        for k in out.columns:
+            assert isinstance(out[k], np.ndarray)
+            assert (out[k] == expected[k]).all()
+            assert out[k].dtype == expected[k].dtype
+    else:
+        bb = b.broadcast_to(2, 3, 2).reshape(-1, 2)
+        expected = tdfl.DataFrame(
+            {
+                "a": torch.tensor([1.0, 1.0, 1.0, 2.0, 2.0, 2.0]),
+                "b[0]": bb[:, 0],
+                "b[1]": bb[:, 1],
+                "c": categorical.tensor([0, 1, 2, 1, 0, 2], categories=("d", "e", "f")),
+            }
+        )
+        if keep_indices and not as_index:
+            expected["idx[0]"] = torch.tensor([0, 0, 0, 1, 1, 1])
+            expected["idx[1]"] = torch.tensor([0, 1, 2, 0, 1, 2])
+        assert out.columns == expected.columns
+        for k in out.columns:
+            assert isinstance(out[k], torch.Tensor)
+            assert (out[k] == expected[k]).all()
+            assert out[k].dtype == expected[k].dtype
+        assert out["b[0]"].requires_grad
+        assert out["b[1]"].requires_grad
+        assert isinstance(out["c"], categorical.CategoricalTensor)
+        assert out["c"].categories == expected["c"].categories

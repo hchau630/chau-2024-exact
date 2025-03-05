@@ -40,7 +40,7 @@ def run(
     batch_size: int | None = None,
     out: Path | str | None = None,
     progress: bool = False,
-) -> DataFrame | Tensor:
+) -> DataFrame:
     # handle alternative input types
     if isinstance(state_dict, (str, Path)):
         state_dict = torch.load(state_dict, map_location="cpu")
@@ -72,6 +72,8 @@ def run(
     rets = []
     for x, kwargs in tqdm(dataloader, desc="batch", disable=not progress):
         x = x.to(device, dtype=dtype)
+        kwargs["model_kwargs"] |= {"to_dataframe": "pandas"}
+        logger.debug(f"kwargs: {kwargs}")
         logger.debug(f"x:\n{x}")
 
         try:
@@ -80,19 +82,12 @@ def run(
         except exceptions.SimulationError as err:
             logger.warning(f"Simulation failed: {err}.")
         else:
-            rets.append(ret if isinstance(ret, Tensor) else ret.to_pandas())
-
-    if all(isinstance(ret, Tensor) for ret in rets):
-        ret = torch.cat(rets)
-    else:
-        ret = pd.concat(rets)
+            rets.append(ret)
+    ret = pd.concat(rets)
 
     # save output
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(ret, Tensor):
-            torch.save(ret, out)
-        else:
-            ret.to_pickle(out)
+        ret.to_pickle(out)
 
     return ret
