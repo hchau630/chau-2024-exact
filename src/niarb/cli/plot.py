@@ -77,6 +77,7 @@ def dataframe(
     func: Callable[..., DataFrame] | Sequence[str | Sequence[str]],
     tags: dict[str, str] | None = None,
     query: str | None = None,
+    evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
     **kwargs,
@@ -100,6 +101,10 @@ def dataframe(
 
     if query:
         df = df.query(query).copy()
+
+    if evals:
+        for k, v in evals.items():
+            df[k] = df.eval(v)
 
     if rolling and cuts and set(rolling) & set(cuts):
         raise ValueError("rolling and cuts cannot share keys.")
