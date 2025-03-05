@@ -1,5 +1,6 @@
 __ref__ = ["run.toml"]
-dataset = { __ref__ = ["fit.toml", "validation_dataset"], N_instantiations = 1, model_kwargs = { output = "weight" } }
+dataset.neurons = { __ref__ = ["fit.toml", "validation_dataset", "neurons"] }
+dataset.model_kwargs = { output = "weight" }
 
 [state_dict]
 __call__ = ["niarb.io", "load_state_dict"]

@@ -1,0 +1,52 @@
+tag_names = ["path", "loss"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights", pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_data"]
+paths = { __eval__ = "path" }
+query = "distance < 500"
+evals = { connected = "W != 0", absW = "W.abs()" }
+cuts = { distance = 50 }
+
+[plots.__matrix__]
+y = ["absW", "connected"]
+
+[[plots.__include__]]
+func = "relplot"
+kind = "line"
+x = "distance"
+hue = "postsynaptic_cell_type"
+hue_order = ["PYR", "PV"]
+row = "presynaptic_cell_type"
+row_order = ["PYR", "PV"]
+col = "loss"
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+color = "black"
+legend_loc = "upper right"
+legend_title = false
+facet_kws = { sharey = false, legend_out = false }
+errorbar = "se"
+err_kws = { linewidth = 0.5 }
+
+[plots.__include__.mapping]
+absW = "Connectivity strength"
+connected = "Connection probability"
+distance = 'Distance ($\mu$m)'
+postsynaptic_cell_type = "Postsynaptic"
+presynaptic_cell_type = "Presynaptic"
+loss = "Loss"
+
+[[plots.__include__]]
+name = { __format__ = "connection_strength_space_{INDICES}" }
+query = "W != 0"
+y = "absW"
+
+[[plots.__include__]]
+name = { __format__ = "connection_probability_space_{INDICES}" }
+y = "connected"
+
