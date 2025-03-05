@@ -166,6 +166,7 @@ class Dataset(torch.utils.data.Dataset):
 
             x = x.unsqueeze(0)  # (1, *shape)
             x["dh"] = dh  # (N_stims, *shape)
+
         x["mask"] = torch.ones(x.shape, dtype=torch.bool)
 
         if "space" in x:

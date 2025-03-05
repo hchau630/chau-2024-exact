@@ -2,6 +2,7 @@ import json
 
 import pytest
 import pandas as pd
+import numpy as np
 
 from niarb import utils, io
 
@@ -88,3 +89,28 @@ def test_rolling():
         )
     )
     pd.testing.assert_frame_equal(out.reset_index(drop=True), expected)
+
+
+@pytest.mark.parametrize("is_dict", [False, True])
+def test_concat(is_dict):
+    df1 = pd.DataFrame({"a": pd.Categorical([0, 0, 1, 1]), "b": 1.0})
+    df2 = pd.DataFrame({"a": pd.Categorical([2, 2, 3, 1]), "c": 2.0})
+    
+    if is_dict:
+        out = utils.concat({"df1": df1, "df2": df2})
+    else:
+        out = utils.concat([df1, df2], ignore_index=True)
+
+    index = None
+    if is_dict:
+        index = pd.MultiIndex.from_product([["df1", "df2"], range(4)])
+    expected = pd.DataFrame(
+        {
+            "a": pd.Categorical([0, 0, 1, 1, 2, 2, 3, 1]),
+            "b": [1.0] * 4 + [np.nan] * 4,
+            "c": [np.nan] * 4 + [2.0] * 4,
+        },
+        index=index
+    )
+    pd.testing.assert_frame_equal(out, expected)
+    

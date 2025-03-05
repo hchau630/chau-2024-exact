@@ -974,12 +974,9 @@ class V1(torch.nn.Module):
                 if not to_dataframe:
                     return W
 
-                logger.debug(f"{W.shape=}, {W.device=}")
                 dims = [(-ndim, None), (-ndim, None)]
-                x = x.data[self.variables]
+                x = x.data[self.variables + ([mask_var] if mask_var in x else [])]
                 x_post, x_pre = frame.meshgrid(x, x, dims=dims, sparse=True)
-                logger.debug(f"x_post:\n{x_post}")
-                logger.debug(f"x_pre:\n{x_pre}")
 
                 # TODO: Think about how to make this more flexible, allowing for
                 # arbitrary columns instead of hardcoding everything.
@@ -991,12 +988,19 @@ class V1(torch.nn.Module):
                 for k, v in [("space", "distance"), ("ori", "rel_ori")]:
                     if k in self.variables:
                         x[v] = functional.diff(x_post[k], x_pre[k]).norm(dim=-1)
-                x = frame.ParameterFrame(x, ndim=2 * ndim)
-                logger.debug(f"x:\n{x}")
+                if mask_var in x_pre:
+                    x[mask_var] = x_post[mask_var] & x_pre[mask_var]
+                x = frame.ParameterFrame(x, ndim=x_pre.ndim)
 
                 if isinstance(W, CirculantTensor):
                     W = W.dense()
                 x = x.datailoc[(None,) * self.batch_ndim] | {"W": W}
+                logger.debug(f"x:\n{x}")
+
+                if mask_var in x:
+                    x = x.iloc[x[mask_var]]
+                    del x[mask_var]
+                logger.debug(f"x:\n{x}")
                 x = x.to_framelike(**framelike_kwargs)
 
                 return x

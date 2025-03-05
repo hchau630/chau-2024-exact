@@ -1,12 +1,13 @@
 import importlib
 import logging
-from collections.abc import Sequence, Mapping, Iterable, Callable, Collection, Mapping
-from itertools import starmap, pairwise
+from collections.abc import Sequence, Mapping, Iterable, Callable, Collection, Mapping, Hashable
+from itertools import starmap, pairwise, chain
 import operator
 from typing import Any
 
 import numpy as np
 import pandas as pd
+from pandas import Series, DataFrame
 
 import hyclib as lib
 
@@ -233,3 +234,19 @@ def rolling(df, column, centers, window):
     df = pd.concat([df] * len(partition))
     df[column] = rolled
     return df
+
+
+def concat(
+    dfs: Sequence[DataFrame] | Mapping[Hashable, DataFrame], **kwargs
+) -> DataFrame:
+    dfs_ = dfs.values() if isinstance(dfs, Mapping) else dfs
+    cat_cols = set.intersection(
+        *[set(k for k, v in df.dtypes.items() if v.name == "category") for df in dfs_]
+    )
+    for col in cat_cols:
+        cats = list(dict.fromkeys(chain(*[df[col].cat.categories for df in dfs_])))
+        for df in dfs_:
+            df[col] = df[col].cat.set_categories(cats)
+
+    return pd.concat(dfs, **kwargs)
+

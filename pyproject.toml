@@ -13,7 +13,7 @@ authors = [{ name = "Ho Yin Chau" }]
 dependencies = [
     "numpy",
     "scipy",
-    "pandas",
+    "pandas[parquet, feather]",
     "seaborn",
     "statsmodels",
     "matplotlib",

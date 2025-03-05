@@ -1,4 +1,5 @@
 __ref__ = ["run.toml"]
+dataset.abs_window = [600.0, 600.0]
 dataset.neurons = { __ref__ = ["fit.toml", "validation_dataset", "neurons"] }
 dataset.model_kwargs = { output = "weight" }
 
@@ -12,7 +13,7 @@ pattern = "*.pt"
 indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
 
 [out]
-__format__ = "runs/weights/{filename}.pt"
+__format__ = "runs/weights/{filename}.feather"
 
 [out.filename]
 __call__ = ["niarb.io", "iterdir"]

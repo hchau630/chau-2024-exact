@@ -9,7 +9,7 @@ from pandas import DataFrame
 import pandas as pd
 from tqdm import tqdm
 
-from niarb import nn, exceptions
+from niarb import nn, exceptions, io
 from niarb.dataset import Dataset, collate_fn
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,6 @@ def run(
     # save output
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
-        ret.to_pickle(out)
+        io.save_dataframe(ret, out)
 
     return ret

@@ -33,6 +33,9 @@ class Scaler(torch.nn.Module):
         torch.nn.init.constant_(self.scale, self.init_scale)
 
     def forward(self, x: ParameterFrame) -> ParameterFrame:
+        if self.var not in x:
+            return x
+
         x = x.copy()
         x[self.var] = self.scale * x[self.var]
         return x

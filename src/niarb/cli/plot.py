@@ -39,6 +39,7 @@ def run(
     dataframes: Iterable[DataFrame | dict[str]],
     plots: Iterable[dict[str]],
     tag_names: Sequence[str] = (),
+    keep_dataframe_idx: bool = True,
     out: Path | str | None = None,
     progress: bool = False,
     show: bool = False,
@@ -50,10 +51,16 @@ def run(
             tags = {k: df.pop(k) for k in tag_names}
             df = dataframe(**df, tags=tags)
         logger.debug(f"df{i}:\n{df}")
+        logger.debug(f"df{i} memory usage:\n{df.memory_usage()}")
         dfs.append(df)
 
-    df = pd.concat(dict(enumerate(dfs))).reset_index(0, names="dataframe_idx")
+    if keep_dataframe_idx:
+        df = utils.concat(dict(enumerate(dfs))).reset_index(0, names="dataframe_idx")
+        df = df.reset_index(drop=True)  # get rid of original index to save memory
+    else:
+        df = utils.concat(dfs, ignore_index=True)
     logger.debug(f"df:\n{df}")
+    logger.debug(f"df memory usage:\n{df.memory_usage()}")
 
     logger.info("Plotting results...")
     figs = {}
@@ -80,6 +87,7 @@ def dataframe(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
+    columns: Sequence[str] | None = None,
     **kwargs,
 ) -> DataFrame:
     if isinstance(func, Sequence):
@@ -97,7 +105,7 @@ def dataframe(
 
     if tags:
         for k, v in tags.items():
-            df[k] = v
+            df[k] = pd.Categorical.from_codes([0] * len(df), categories=(v,))
 
     if query:
         df = df.query(query).copy()
@@ -118,6 +126,9 @@ def dataframe(
         for k, (centers, window) in rolling.items():
             if k in df.columns:
                 df = utils.rolling(df, k, centers, window)
+
+    if columns:
+        df = df[columns]
 
     return df
 
