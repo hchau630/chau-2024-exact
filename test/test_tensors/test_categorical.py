@@ -4,6 +4,7 @@ import pickle
 import pytest
 import torch
 import numpy as np
+import pandas as pd
 
 from niarb.tensors import categorical, periodic
 
@@ -12,6 +13,15 @@ def test_numpy():
     x = categorical.tensor([0, 2, 1, 2], categories=["a", "b", "c"])
     out = x.numpy()
     assert (out == np.array(["a", "c", "b", "c"])).all()
+
+
+def test_pandas():
+    x = categorical.tensor([0, 2, 1, 2], categories=["a", "b", "c"])
+    out = x.pandas()
+    expected = pd.Categorical(["a", "c", "b", "c"], categories=["a", "b", "c"])
+    assert isinstance(out, pd.Categorical)
+    assert list(out.categories) == ["a", "b", "c"]
+    assert out.equals(expected)
 
 
 @pytest.mark.parametrize("op", ["eq", "ne"])

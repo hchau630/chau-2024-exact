@@ -3,6 +3,7 @@ import functools
 
 import torch
 import numpy as np
+import pandas as pd
 
 from .base import tensor_class_factory, _rebuild, BaseTensor
 
@@ -62,6 +63,10 @@ class CategoricalTensor(BaseTensor):
         args = list(args)
         args[1] = {"categories": self.categories}
         return _rebuild, (func, tuple(args), CategoricalTensor)
+
+    def pandas(self, force: bool = False) -> pd.Categorical:
+        data = self.tensor.numpy(force=force)
+        return pd.Categorical.from_codes(data, categories=self.categories)
 
 
 HANDLED_FUNCTIONS = {}

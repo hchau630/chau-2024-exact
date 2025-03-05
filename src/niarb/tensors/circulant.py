@@ -3,6 +3,7 @@ import itertools
 import functools
 
 import torch
+from torch import Tensor
 
 from .base import tensor_class_factory, _rebuild
 from .base_circulant import BaseCirculantTensor
@@ -181,7 +182,7 @@ class CirculantTensor(BaseCirculantTensor):
             vec_shape[d] = shape[i]
         return torch.Size(vec_shape)
 
-    def dense(self, keep_shape=True):
+    def dense(self, keep_shape: bool = True) -> Tensor:
         out = super().dense(keep_shape=True)
 
         out = out.reshape(

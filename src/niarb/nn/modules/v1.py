@@ -9,6 +9,7 @@ from numbers import Number
 import torch
 from torch import Tensor
 import numpy as np
+import pandas as pd
 import hyclib as lib
 import tdfl
 
@@ -781,8 +782,8 @@ class V1(torch.nn.Module):
         gain_kwargs: dict[str] | None = None,
         check_circulant: bool = True,
         assert_finite: bool = True,
-        to_dataframe: bool = True,
-    ) -> ParameterFrame | tdfl.DataFrame | Tensor:
+        to_dataframe: str | bool = True,
+    ) -> ParameterFrame | tdfl.DataFrame | pd.DataFrame | Tensor:
         """Compute perturbation response or connectivity weights of the model.
 
         Output is computed for each set of model parameters, i.e. it is equivalent
@@ -806,12 +807,32 @@ class V1(torch.nn.Module):
                 Set to False if it is known to not be circulant to improve performance.
             assert_finite (optional): Raise error if Infs or NaNs are present in model output.
                 Ignored if output == 'weight'.
+            to_dataframe (optional): If True, returns a tdfl.DataFrame. If a str, must
+                be either 'tdfl' or 'pandas'. If 'pandas', returns a pandas.DataFrame.
 
         Returns:
-            If output == 'response', a tdfl.DataFrame with column out_var added.
-            Otherwise, a Tensor of connectivity weights.
+            If output == 'response', a DataFrame with column out_var added. If
+            to_dataframe is False, then output is instead a ParamaterFrame.
+            Otherwise, a DataFrame with columns ['W', 'presynaptic_cell_type',
+            'postsynaptic_cell_type', 'distance', 'rel_ori', 'presynaptic_osi',
+            'postsynaptic_osi'] (excluding columns incompatible with model
+            variables, e.g. if 'ori' is not in self.variables, then 'rel_ori'
+            is not an output column). If to_dataframe is False, then output
+            is instead a Tensor of connectivity weights.
 
         """
+        if isinstance(to_dataframe, str) and to_dataframe not in {"tdfl", "pandas"}:
+            raise ValueError(
+                "to_dataframe must be either 'tdfl', 'pandas', or bool, but got "
+                f"{to_dataframe=}."
+            )
+        # don't keep indices if output is connectivity weights to save memory
+        framelike_kwargs = {
+            "cls": pd.DataFrame if to_dataframe == "pandas" else tdfl.DataFrame,
+            "keep_indices": to_dataframe == "pandas" and output == "response",
+            "to_numpy": to_dataframe == "pandas",
+        }
+
         if (
             output == "response"
             and self.mode != "numerical"
@@ -909,7 +930,7 @@ class V1(torch.nn.Module):
                     "f must be nn.Identity when mode = 'matrix' or 'matrix_approx'."
                 )
 
-            W = self.forward(x, output="weight", ndim=ndim)
+            W = self.forward(x, output="weight", ndim=ndim, to_dataframe=False)
             I = linalg.eye_like(W)  # (*bshape, *, *shape, *shape)
             dh = x.data[in_var]  # (*, *shape)
             if self.mode == "matrix":
@@ -950,7 +971,31 @@ class V1(torch.nn.Module):
                     W = weights.sample_log_normal(W, self.W_std)
 
             if output == "weight":
-                return W
+                if not to_dataframe:
+                    return W
+
+                dims = [(-ndim, None), (-ndim, None)]
+                x = x.data[self.variables]
+                x_post, x_pre = frame.meshgrid(x, x, dims=dims, sparse=True)
+
+                # TODO: Think about how to make this more flexible, allowing for
+                # arbitrary columns instead of hardcoding everything.
+                x = {}
+                for k in ["cell_type", "osi"]:
+                    if k in self.variables:
+                        x[f"presynaptic_{k}"] = x_pre[k]
+                        x[f"postsynaptic_{k}"] = x_post[k]
+                for k, v in [("space", "distance"), ("ori", "rel_ori")]:
+                    if k in self.variables:
+                        x[v] = functional.diff(x_post[k], x_pre[k]).norm(dim=-1)
+                x = frame.ParameterFrame(x, ndim=2 * ndim)
+
+                if isinstance(W, CirculantTensor):
+                    W = W.dense()
+                x = x.datailoc[(None,) * self.batch_ndim] | {"W": W}
+                x = x.to_framelike(**framelike_kwargs)
+
+                return x
 
             if ndim > 1 and not isinstance(W, CirculantTensor):
                 raise NotImplementedError(
@@ -980,7 +1025,7 @@ class V1(torch.nn.Module):
             x = x.iloc[x[mask_var]]
 
         if to_dataframe:
-            x = x.to_framelike(cls=tdfl.DataFrame, as_index=False, to_numpy=False)
+            x = x.to_framelike(**framelike_kwargs)
 
         return x
 

@@ -221,7 +221,7 @@ class TestV1:
         )
 
         with torch.no_grad():
-            out = model(x, output="weight", ndim=x.ndim)
+            out = model(x, output="weight", ndim=x.ndim, to_dataframe=False)
 
         out = out.dense(keep_shape=False) if isinstance(out, CirculantTensor) else out
         x = x.reshape(-1)
@@ -280,7 +280,7 @@ class TestV1:
         M = 50000
         x_ = frame.stack([x] * M)
         with random.set_seed(0):
-            out = model(x_, output="weight", ndim=2)
+            out = model(x_, output="weight", ndim=2, to_dataframe=False)
 
         prob1 = torch.tensor(
             [
@@ -306,8 +306,29 @@ class TestV1:
         assert (out_prob <= prob + 2.5 * sem).all()
 
         model.prob_kernel = None
-        expected = model(x, output="weight", ndim=2).dense()
+        expected = model(x, output="weight", ndim=2, to_dataframe=False).dense()
         torch.testing.assert_close(out.mean(dim=0), expected, atol=1e-5, rtol=5e-2)
+
+    def test_weights_dataframe(self):
+        with random.set_seed(0):
+            model = nn.V1(
+                ["cell_type", "space"], cell_types=(CellType.PYR, CellType.PV)
+            )
+        x = neurons.as_grid(
+            2, (2,), cell_types=(CellType.PYR, CellType.PV), space_extent=(2,)
+        )
+        out = model(x, output="weight", ndim=2, to_dataframe="pandas")
+        W = model(x, output="weight", ndim=2, to_dataframe=False).dense()
+        ct = ["PYR", "PV"]
+        expected = {
+            "W": W.detach().numpy().reshape(-1),
+            "distance": [0, 1, 0, 1, 1, 0, 1, 0] * 2,
+            "postsynaptic_cell_type": pd.Categorical.from_codes([0] * 8 + [1] * 8, ct),
+            "presynaptic_cell_type": pd.Categorical.from_codes([0, 0, 1, 1] * 4, ct),
+        }
+        expected = pd.DataFrame(expected)
+        expected["distance"] = expected["distance"].astype("float32")
+        pd.testing.assert_frame_equal(out, expected)
 
     @pytest.mark.parametrize(
         "f, variables, d, osi_func, osi_prob, sigma_symmetry, mode",
@@ -598,7 +619,6 @@ class TestV1:
             atol=1.0e-5,
         )
         out, expected = out.drop(columns="dr"), expected.drop(columns="dr")
-        out = out.drop(columns=["idx[0]", "idx[1]", "idx[2]"])
         pd.testing.assert_frame_equal(out, expected)
 
     @pytest.mark.parametrize("f", ["Identity", "Ricciardi", "Match"])
@@ -677,8 +697,6 @@ class TestV1:
             atol=1.0e-5,
         )
         out, expected = out.drop(columns="dr"), expected.drop(columns="dr")
-        if not masked:
-            out = out.drop(columns=["idx[0]", "idx[1]", "idx[2]"])
         pd.testing.assert_frame_equal(out, expected)
 
     @pytest.mark.parametrize("f", ["Identity", "Ricciardi"])
@@ -757,7 +775,6 @@ class TestV1:
             atol=1.0e-5,
         )
         out, expected = out.drop(columns="dr"), expected.drop(columns="dr")
-        out = out.drop(columns=["idx[0]", "idx[1]", "idx[2]", "idx[3]"])
         pd.testing.assert_frame_equal(out, expected)
 
     @pytest.mark.parametrize(
@@ -876,7 +893,7 @@ class TestV1:
                     x = x.iloc[indices]
 
                 with torch.no_grad():
-                    W = model(x, output="weight", ndim=x.ndim)
+                    W = model(x, output="weight", ndim=x.ndim, to_dataframe=False)
 
                 if f[0] == "SSN":
                     (p,) = f[1]
@@ -945,7 +962,7 @@ class TestV1:
                     x = x.iloc[indices]
 
                 with torch.no_grad():
-                    W = model(x, output="weight", ndim=x.ndim)
+                    W = model(x, output="weight", ndim=x.ndim, to_dataframe=False)
 
                 spectrum = torch.linalg.eigvals(W)
 
@@ -1020,7 +1037,9 @@ class TestV1:
             x = neurons.as_grid(n=2, N_space=[480], space_extent=[2000.0])
 
             with torch.no_grad():
-                W = model(x, output="weight", ndim=x.ndim).dense(keep_shape=False)
+                W = model(x, output="weight", ndim=x.ndim, to_dataframe=False).dense(
+                    keep_shape=False
+                )
 
             eye = torch.eye(W.shape[-1])
             spectrum = torch.linalg.eigvals((W - eye) / tau[:, None])
