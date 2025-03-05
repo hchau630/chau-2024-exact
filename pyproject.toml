@@ -23,6 +23,7 @@ dependencies = [
     "tdfl >= 0.1.15",
     "tqdm",
     "ricciardi >= 0.1.4",
+    "torch-bessel >= 0.0.4",
 ]
 
 [project.scripts]

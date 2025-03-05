@@ -14,7 +14,7 @@ def get_x(is_double):
     return out, torch.from_numpy(out)
 
 
-@pytest.mark.parametrize("d", list(range(1, 6)))
+@pytest.mark.parametrize("d", list(range(6)))
 @pytest.mark.parametrize("is_double", [False, True])
 @pytest.mark.parametrize(
     "l",
@@ -38,7 +38,11 @@ def test_laplace_r(d, is_double, l, dr):
     prefactor = (2 * np.pi) ** (-d / 2)
 
     y_np = prefactor * (s / x_np) ** (d / 2 - 1) * kv(d / 2 - 1, s * x_np)
-    if d == 1:
+    if d == 0:
+        pass
+        # Uncomment this (and comment out `pass`) when r = 0 case is handled properly
+        # y_np[..., 0] = 1 / (s + x_np * 0)[..., 0]**2
+    elif d == 1:
         y_np[..., 0] = (1 / (2 * s) * np.exp(-s * x_np))[..., 0]
     elif dr == 0.0:
         y_np[..., 0] = 0.0
@@ -66,7 +70,7 @@ def test_laplace_r(d, is_double, l, dr):
     )
 
 
-@pytest.mark.parametrize("d", list(range(1, 6)))
+@pytest.mark.parametrize("d", list(range(6)))
 @pytest.mark.parametrize(
     "l",
     [
@@ -95,6 +99,10 @@ def test_laplace_r_grad(d, l, x_requires_grad, l_requires_grad):
     if x_requires_grad:
         x.requires_grad = True
         x = x[1:]  # gradient w.r.t x at x = 0 is undefined
+        l = l[1:] if l.ndim > 0 else l
+    elif d == 0:
+        # delete this when r = 0 is handled for the case d = 0
+        x = x[1:]
         l = l[1:] if l.ndim > 0 else l
 
     torch.autograd.gradcheck(special.resolvent.laplace_r, (d, l, x))

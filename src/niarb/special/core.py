@@ -2,6 +2,7 @@ from collections.abc import Sequence, Callable
 
 import torch
 from torch import Tensor
+import torch_bessel
 import numpy as np
 from scipy import special as scipy_special
 
@@ -264,41 +265,6 @@ def yukawa(a: Tensor, r: Tensor, singularity: float | Tensor = 0.0) -> Tensor:
     return Yukawa.apply(a, r, torch.as_tensor(singularity))[0]
 
 
-class ModifiedBesselK0(torch.autograd.Function):
-    @staticmethod
-    def forward(z):
-        if z.is_complex():
-            out = scipy_special.kv(0, z.detach().cpu().numpy())
-            out = torch.as_tensor(out).to(dtype=z.dtype, device=z.device)
-        else:
-            out = torch.special.modified_bessel_k0(z)
-        return out
-
-    @staticmethod
-    def setup_context(ctx, inputs, _):
-        if ctx.needs_input_grad[0]:
-            ctx.save_for_backward(*inputs)
-        ctx.set_materialize_grads(False)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        if grad_output is None or not ctx.needs_input_grad[0]:
-            return None
-
-        (z,) = ctx.saved_tensors
-        if z.is_complex():
-            # Note: We need to take the conjugate of the derivative. To understand why,
-            # see https://pytorch.org/docs/stable/notes/autograd.html#complex-autograd-doc
-            # where in equation 4 we note that since this is a holomorphic function,
-            # the derivative w.r.t conjugate of z is zero, so the first term is zero.
-            grad = -scipy_special.kv(1, z.detach().cpu().numpy())
-            grad = torch.as_tensor(grad).to(dtype=z.dtype, device=z.device).conj()
-        else:
-            grad = -torch.special.modified_bessel_k1(z)
-
-        return grad.mul_(grad_output)
-
-
 class ModifiedBesselK1(torch.autograd.Function):
     @staticmethod
     def forward(z):
@@ -335,14 +301,12 @@ class ModifiedBesselK1(torch.autograd.Function):
         return grad.mul_(grad_output)
 
 
-def k0(z: Tensor) -> Tensor:
-    # manually implement autograd since torch.special.modified_bessel_k0
-    # is not differentiable
+def k0(z: Tensor, **kwargs) -> Tensor:
     dtype = None
     if z.dtype not in BASIC_DTYPES:
         dtype = z.dtype
-        z = z.to(torch.float)
-    out = ModifiedBesselK0.apply(z)
+        z = z.to(torch.cfloat) if z.is_complex() else z.to(torch.float)
+    out = torch_bessel.ops.modified_bessel_k0(z, **kwargs)
     if dtype:
         out = out.to(dtype)
     return out
@@ -354,7 +318,7 @@ def k1(z: Tensor) -> Tensor:
     dtype = None
     if z.dtype not in BASIC_DTYPES:
         dtype = z.dtype
-        z = z.to(torch.float)
+        z = z.to(torch.cfloat) if z.is_complex() else z.to(torch.float)
     out = ModifiedBesselK1.apply(z)
     if dtype:
         out = out.to(dtype)
@@ -365,7 +329,7 @@ def kd(d: int, z: Tensor) -> Tensor:
     r"""Modified Bessel function of the second kind of order d/2-1.
 
     Computes K_{d/2-1}(z), where K_\nu is the modified Bessel function of the second kind,
-    for positive integers d.
+    for non-negative integers d.
 
     Args:
         d: 'Dimension' parameter, such that the order of the Bessel function is d/2-1.
@@ -375,14 +339,14 @@ def kd(d: int, z: Tensor) -> Tensor:
         Tensor with same shape as z.
 
     """
-    if not isinstance(d, int) or d <= 0:
-        raise ValueError(f"d must be a positive integer, but {d=}.")
+    if not isinstance(d, int) or d < 0:
+        raise ValueError(f"d must be a non-negaive integer, but {d=}.")
 
     if d % 2 == 1:
         out = z**-0.5 * scaled_kd(d, z)
     elif d == 2:
         out = k0(z)
-    elif d == 4:
+    elif d in {0, 4}:
         out = k1(z)
     else:
         # use recurrence relationship of Bessel functions
@@ -483,3 +447,4 @@ def ball_radius(d: int, vol: Tensor | float) -> Tensor | float:
 
     """
     return (vol * (scipy_special.gamma(d / 2 + 1) / torch.pi ** (d / 2))) ** (1 / d)
+

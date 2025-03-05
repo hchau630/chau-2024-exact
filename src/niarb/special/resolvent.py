@@ -2,19 +2,14 @@ import contextlib
 from numbers import Number
 from collections.abc import Callable
 from typing import Concatenate
-import logging
 
 import torch
 from torch import Tensor
 
-from .core import yukawa, kd, scaled_kd, irkd
+from .core import yukawa, k0, kd, scaled_kd, irkd
 from niarb.linalg import is_diagonal
 from niarb.utils import take_along_dims
 
-logger = logging.getLogger(__name__)
-
-# tensor dtypes supported by various torch.linalg operations such as inv and eig
-LINALG_DTYPES = {torch.float, torch.cfloat, torch.double, torch.cdouble}
 
 # @profile
 def laplace_r(
@@ -37,9 +32,6 @@ def laplace_r(
     $\lambda \in \mathbb{C} \ (-\infty, 0]$, but here we will just plug in negative
     $\lambda$ into the above expression directly.
 
-    Backpropagation is not supported for (d % 2 == 0 and d > 4) or (d in {2, 4}
-    and (l.is_complex() or (l < 0).any()).
-
     Args:
         d: Dimension of the space.
         l: Parameter $\lambda$.
@@ -52,8 +44,8 @@ def laplace_r(
 
     """
     if validate_args:
-        if not isinstance(d, int) or d <= 0:
-            raise ValueError(f"d must be a positive integer, but {d=}.")
+        if not isinstance(d, int):
+            raise ValueError(f"d must be an integer, but {d=}.")
 
         if r.is_complex():
             raise TypeError(f"r must be real, but {r.dtype=}.")
@@ -78,6 +70,16 @@ def laplace_r(
 
     s = l**0.5
 
+    if d <= 0:
+        # kd is faster for even dimensions and scaled_kd is faster for odd dimensions
+        # WARNING: current implementation is incomplete - it returns NaN instead of a
+        # finite number for r = 0.
+        if d % 2 == 0:
+            out = (r / s) ** int(1 - d / 2) * kd(d, s * r)
+        else:
+            out = s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
+        return (2 * torch.pi) ** (-d / 2) * out
+
     if d == 1:
         # need to treat the 1D case separately since the limit at r = 0 is finite,
         # but the more general approach below will lead to torch.nan at r = 0.
@@ -90,32 +92,39 @@ def laplace_r(
     else:
         singularity = 0.0
 
+    if d == 2:
+        return k0(s * r, singularity=singularity) / (2 * torch.pi)
+
     if d == 3:
         # faster computation for 3D case
         singularity = (2 / torch.pi) ** 0.5 * singularity
         return 1 / (4 * torch.pi) * yukawa(torch.as_tensor(s), r, singularity)
 
-    # all the masking is needed in lieu of torch.where due to NaN gradients for
-    # r = 0 entries, see https://github.com/pytorch/pytorch/issues/68425
-    # for an explanation of the issue of NaN gradient propagation in pytorch
-    if isinstance(s, torch.Tensor):
-        s, r = torch.broadcast_tensors(s, r)
-    out = singularity * torch.ones(
-        r.shape, dtype=torch.result_type(s, r), device=r.device
-    )
-    mask = r != 0
-    r = r[mask]  # Bessel function diverges at r = 0 for d > 1.
-    if isinstance(s, torch.Tensor):
-        s = s[mask]
+    requires_grad = (isinstance(s, torch.Tensor) and s.requires_grad) or r.requires_grad
+    if requires_grad:
+        # all the masking is needed in lieu of torch.where due to NaN gradients for
+        # r = 0 entries, see https://github.com/pytorch/pytorch/issues/68425
+        # for an explanation of the issue of NaN gradient propagation in pytorch
+        if isinstance(s, torch.Tensor):
+            s, r = torch.broadcast_tensors(s, r)
+        out = singularity * torch.ones(
+            r.shape, dtype=torch.result_type(s, r), device=r.device
+        )
+        mask = r != 0
+        r = r[mask]  # Bessel function diverges at r = 0 for d > 1.
+        if isinstance(s, torch.Tensor):
+            s = s[mask]
 
     # kd is faster for even dimensions and scaled_kd is faster for odd dimensions
-    if d == 2:
-        # fast path for d == 2
-        out[mask] = kd(d, s * r)
-    elif d % 2 == 0:
-        out[mask] = (s / r) ** int(d / 2 - 1) * kd(d, s * r)
+    if d % 2 == 0:
+        tmp = (s / r) ** int(d / 2 - 1) * kd(d, s * r)
     else:
-        out[mask] = s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
+        tmp = s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
+
+    if requires_grad:
+        out[mask] = tmp
+    else:
+        out = torch.where(r != 0, tmp, singularity)
 
     return (2 * torch.pi) ** (-d / 2) * out
 
@@ -175,12 +184,6 @@ def mixture(
     """
     m = S.shape[-1]
 
-    dtype = None
-    if any(isinstance(t, Tensor) and t.dtype not in LINALG_DTYPES for t in [S, U, V, l]):
-        dtype = _result_type(S, U, V, l)
-        new_dtype = dtype if dtype in LINALG_DTYPES else torch.float
-        S, U, V = S.to(new_dtype), U.to(new_dtype), V.to(new_dtype)
-
     Sinv = torch.linalg.inv(S)  # (*S, m, m)
     if (
         (isinstance(l, Number) and l == 0) or (isinstance(l, Tensor) and (l == 0).all())
@@ -198,9 +201,6 @@ def mixture(
     # conjugate symmetry in diagonalization of real matrices
     if L.isreal().all():
         L, PinvV, UP = L.real, PinvV.real, UP.real
-
-    if dtype:
-        L, PinvV, UP = L.to(dtype), PinvV.to(dtype), UP.to(dtype)
 
     if (flag := is_diagonal(UP)) or is_diagonal(PinvV):
         # faster path for special case where either UP or PinvV is diagonal
@@ -225,15 +225,4 @@ def mixture(
         out = sum(UP[..., i] * PinvV[..., i] * out[i] for i in range(m))  # SUVlija
         # out = sum(UP[..., i] * PinvV[..., i] * R(L[..., i], *args) for i in range(m))  # SUVlija
     return out
-
-
-def _result_type(*tensors):
-    if len(tensors) < 2:
-        raise RuntimeError()
-
-    dtype = torch.result_type(*tensors[:2])
-    for t in tensors[2:]:
-        dtype = torch.result_type(t, torch.empty((), dtype=dtype))
-
-    return dtype
 
