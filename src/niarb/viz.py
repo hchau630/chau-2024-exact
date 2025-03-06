@@ -155,18 +155,45 @@ def figplot(
     return g
 
 
-def relplot(data=None, *, x=None, **kwargs):
+def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
     if _is_interval_dtype(data[x].dtype):
         data = data.copy()
-        data[x] = pd.IntervalIndex(data[x]).mid
+        if isinstance(data[x].dtype, pd.IntervalDtype):
+            data[x] = data[x].array.mid
+        else:
+            data[x] = data[x].cat.rename_categories(data[x].cat.categories.mid)
+    logger.debug(f"data:\n{data}")
+    logger.debug(f"data memory usage:\n{data.memory_usage()}")
 
-    return sns.relplot(data=data, x=x, **kwargs)
+    # for some reason seaborn is very memory-inefficient, so manually do groupby
+    # if errorbar is "se", "sd", or None. This is important for plotting large
+    # dataframes such as when plotting weights.
+    if errorbar in {"se", "sd", None}:
+        by = [x] + [
+            v for k, v in kwargs.items() if k in {"x", "hue", "col", "row", "style"}
+        ]
+        agg = {y: "mean"}
+        if errorbar == "se":
+            agg[f"{y}_{errorbar}"] = "sem"
+        elif errorbar == "sd":
+            agg[f"{y}_{errorbar}"] = "std"
+        data = data.groupby(by, observed=True, as_index=False)[y].agg(**agg)
+        if errorbar:
+            data = sample_df(data, errorbar=errorbar, y=y, yerr=f"{y}_{errorbar}")
+    logger.debug(f"grouped data:\n{data}")
+
+    return sns.relplot(data=data, x=x, y=y, errorbar=errorbar, **kwargs)
 
 
 def lmplot(data=None, *, x=None, **kwargs):
     if _is_interval_dtype(data[x].dtype):
         data = data.copy()
-        data[x] = pd.IntervalIndex(data[x]).mid
+        if isinstance(data[x].dtype, pd.IntervalDtype):
+            data[x] = data[x].array.mid
+        else:
+            data[x] = data[x].cat.rename_categories(data[x].cat.categories.mid)
+    logger.debug(f"data:\n{data}")
+    logger.debug(f"data memory usage:\n{data.memory_usage()}")
 
     return sns.lmplot(data=data, x=x, **kwargs)
 
