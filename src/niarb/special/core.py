@@ -328,8 +328,7 @@ def k1(z: Tensor) -> Tensor:
 def kd(d: int, z: Tensor) -> Tensor:
     r"""Modified Bessel function of the second kind of order d/2-1.
 
-    Computes K_{d/2-1}(z), where K_\nu is the modified Bessel function of the second kind,
-    for non-negative integers d.
+    Computes K_{d/2-1}(z), where K_\nu is the modified Bessel function of the second kind.
 
     Args:
         d: 'Dimension' parameter, such that the order of the Bessel function is d/2-1.
@@ -339,8 +338,9 @@ def kd(d: int, z: Tensor) -> Tensor:
         Tensor with same shape as z.
 
     """
-    if not isinstance(d, int) or d < 0:
-        raise ValueError(f"d must be a non-negaive integer, but {d=}.")
+    if d < 2:
+        # K_\nu(z) = K_{-\nu}(z)
+        d = 4 - d
 
     if d % 2 == 1:
         out = z**-0.5 * scaled_kd(d, z)
@@ -447,4 +447,3 @@ def ball_radius(d: int, vol: Tensor | float) -> Tensor | float:
 
     """
     return (vol * (scipy_special.gamma(d / 2 + 1) / torch.pi ** (d / 2))) ** (1 / d)
-

@@ -58,7 +58,7 @@ def test_yukawa_grad(a, r, s, a_requires_grad, r_requires_grad, s_requires_grad)
     torch.autograd.gradcheck(special.yukawa, (a, r, s))
 
 
-@pytest.mark.parametrize("d", list(range(1, 6)))
+@pytest.mark.parametrize("d", list(range(6)))
 @pytest.mark.parametrize("is_complex", [False, True])
 @pytest.mark.parametrize("is_double", [False, True])
 def test_kd(d, is_complex, is_double):
@@ -76,7 +76,7 @@ def test_kd(d, is_complex, is_double):
     torch.testing.assert_close(torch.from_numpy(y_np), y_torch, equal_nan=True)
 
 
-@pytest.mark.parametrize("d", list(range(1, 6)))
+@pytest.mark.parametrize("d", list(range(6)))
 @pytest.mark.parametrize("is_complex", [False, True])
 def test_kd_grad(d, is_complex):
     _, x = get_x(is_complex, True)

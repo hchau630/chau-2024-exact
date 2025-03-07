@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import numpy as np
 from scipy.special import kv
 from scipy.integrate import quad
@@ -39,9 +41,7 @@ def test_laplace_r(d, is_double, l, dr):
 
     y_np = prefactor * (s / x_np) ** (d / 2 - 1) * kv(d / 2 - 1, s * x_np)
     if d == 0:
-        pass
-        # Uncomment this (and comment out `pass`) when r = 0 case is handled properly
-        # y_np[..., 0] = 1 / (s + x_np * 0)[..., 0]**2
+        y_np[..., 0] = 1 / np.broadcast_arrays(l, x_np)[0][..., 0]
     elif d == 1:
         y_np[..., 0] = (1 / (2 * s) * np.exp(-s * x_np))[..., 0]
     elif dr == 0.0:
@@ -63,11 +63,16 @@ def test_laplace_r(d, is_double, l, dr):
 
     if isinstance(l, np.ndarray):
         l = torch.from_numpy(l)
-    y_torch = special.resolvent.laplace_r(d, l, x_torch, dr=dr)
 
-    torch.testing.assert_close(
-        torch.from_numpy(y_np), y_torch, equal_nan=True, rtol=5e-4, atol=1e-6
-    )
+    with pytest.raises(ValueError) if d <= 1 and dr != 0.0 else nullcontext():
+        y_torch = special.resolvent.laplace_r(d, l, x_torch, dr=dr)
+
+    if d > 1 or dr == 0.0:
+        print(y_np)
+        print(y_torch)
+        torch.testing.assert_close(
+            torch.from_numpy(y_np), y_torch, equal_nan=True, rtol=5e-4, atol=1e-6
+        )
 
 
 @pytest.mark.parametrize("d", list(range(6)))
@@ -99,10 +104,6 @@ def test_laplace_r_grad(d, l, x_requires_grad, l_requires_grad):
     if x_requires_grad:
         x.requires_grad = True
         x = x[1:]  # gradient w.r.t x at x = 0 is undefined
-        l = l[1:] if l.ndim > 0 else l
-    elif d == 0:
-        # delete this when r = 0 is handled for the case d = 0
-        x = x[1:]
         l = l[1:] if l.ndim > 0 else l
 
     torch.autograd.gradcheck(special.resolvent.laplace_r, (d, l, x))

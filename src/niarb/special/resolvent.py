@@ -1,4 +1,4 @@
-import contextlib
+import math
 from numbers import Number
 from collections.abc import Callable
 from typing import Concatenate
@@ -24,7 +24,7 @@ def laplace_r(
     Radial component of the kernel of the resolvent of the
     laplace operator in d dimensions, i.e.
     $\bra{x}(l - \nabla^2)^{-1}\ket{y} = laplace(d, l, ||x - y||)$
-    but with the modification that the output is 0 when d > 1 and r == 0,
+    but with the modification that the output is finite when d > 1 and r == 0,
     due to the fact that the resolvent diverges when d > 1 and r == 0.
     Explicitly, the equation is given by
     $1 / (2\pi)^{d/2} (\sqrt{l} / r)^{d/2 - 1} K_{d/2 - 1}(\sqrt{l}r)$
@@ -36,7 +36,8 @@ def laplace_r(
         d: Dimension of the space.
         l: Parameter $\lambda$.
         r: Tensor of distances, must be non-negative and real.
-        dr (optional): Small positive number to avoid singularity at r = 0.
+        dr (optional): Small non-negative number to avoid singularity at r = 0. Must be
+            0.0 if d <= 1, as there is no singularity in these cases.
         validate_args (optional): Whether to validate the arguments.
 
     Returns:
@@ -58,6 +59,9 @@ def laplace_r(
         if not (r >= 0).all():
             raise ValueError(f"r must be non-negative, but {r.min()=}.")
 
+        if d <= 1 and not (isinstance(dr, float) and dr == 0.0):
+            raise ValueError(f"dr must be 0.0 when d <= 1, but {dr=}.")
+
     if isinstance(l, torch.Tensor) and not l.is_complex() and (l < 0).any():
         # cast real tensors with negative elements to corresponding complex dtype
         # so that the square root operation does not result in NaNs.
@@ -70,23 +74,16 @@ def laplace_r(
 
     s = l**0.5
 
-    if d <= 0:
-        # kd is faster for even dimensions and scaled_kd is faster for odd dimensions
-        # WARNING: current implementation is incomplete - it returns NaN instead of a
-        # finite number for r = 0.
-        if d % 2 == 0:
-            out = (r / s) ** int(1 - d / 2) * kd(d, s * r)
-        else:
-            out = s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
-        return (2 * torch.pi) ** (-d / 2) * out
-
     if d == 1:
         # need to treat the 1D case separately since the limit at r = 0 is finite,
         # but the more general approach below will lead to torch.nan at r = 0.
         # the 1D case equation is 1 / (2 \sqrt{\lambda}) e^{-\sqrt{\lambda}r)
         return 1 / (2 * s) * torch.exp(-s * r)
 
-    if not isinstance(dr, float) or dr != 0.0:
+    if d <= 1:
+        # (2\pi)^(d/2) lim_{r -> 0^+} G_d(r; l) for d <= 1. Calculated by Mathematica.
+        singularity = math.gamma(1 - d / 2) * l ** (d / 2 - 1) / 2 ** (d / 2)
+    elif not isinstance(dr, float) or dr != 0.0:
         dr = torch.as_tensor(dr)
         singularity = d * irkd(d, s * dr) / (dr**d * l)
     else:
@@ -225,4 +222,3 @@ def mixture(
         out = sum(UP[..., i] * PinvV[..., i] * out[i] for i in range(m))  # SUVlija
         # out = sum(UP[..., i] * PinvV[..., i] * R(L[..., i], *args) for i in range(m))  # SUVlija
     return out
-
