@@ -371,8 +371,12 @@ def scaled_kd(d: int, z: Tensor) -> Tensor:
         Tensor with same shape as z.
 
     """
-    if not isinstance(d, int) or d <= 0 or d % 2 == 0:
-        raise ValueError(f"d must be a positive odd integer, but {d=}.")
+    if not isinstance(d, int) or d % 2 == 0:
+        raise ValueError(f"d must be an odd integer, but {d=}.")
+
+    if d < 2:
+        # K_\nu(z) = K_{-\nu}(z)
+        d = 4 - d
 
     # See https://functions.wolfram.com/Bessel-TypeFunctions/BesselK/introductions/Bessels/ShowAll.html
     out = (torch.pi / 2) ** 0.5 * torch.exp(-z)
