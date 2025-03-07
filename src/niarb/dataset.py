@@ -206,6 +206,7 @@ class Dataset(torch.utils.data.Dataset):
                 [x, self.tags.datailoc[(...,) + (None,) * (x.ndim - 1)]], dim=-1
             )
 
+        x["instance_idx"] = torch.tensor(index)[(None,) * x.ndim]
         if self.y is None:
             return x, self.kwargs
 

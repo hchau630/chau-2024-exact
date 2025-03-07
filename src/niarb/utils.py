@@ -224,12 +224,23 @@ def rolling(df, column, centers, window):
     """
     partition = nonoverlapping_partition(centers, window)
     rolled = []
+    logger.debug(f"{len(partition)=}")
+
     for p in partition:
+        logger.debug(f"p:\n{p}")
+        logger.debug(f"df[column]:\n{df[column]}")
         p = np.array(p)
-        bins = pd.IntervalIndex.from_arrays(
-            p - window / 2, p + window / 2, closed="left"
-        )
-        rolled.append(pd.cut(df[column], bins=bins))
+        # Ideally we would use the code below, but there is a severe performance bug:
+        # https://github.com/pandas-dev/pandas/issues/47614
+        # bins = pd.IntervalIndex.from_arrays(
+        #     p - window / 2, p + window / 2, closed="left"
+        # )
+        # rolled_i = pd.cut(df[column], bins=bins)
+        # Fortunately the workaround is quite simple.
+        bins = chain.from_iterable(zip(p - window / 2, p + window / 2))
+        rolled_i = pd.cut(df[column], bins=bins, right=False)
+        rolled_i = rolled_i.cat.remove_categories(rolled_i.cat.categories[1::2])
+        rolled.append(rolled_i)
     rolled = pd.api.types.union_categoricals(rolled, ignore_order=True)
     df = pd.concat([df] * len(partition))
     df[column] = rolled
@@ -250,3 +261,24 @@ def concat(
 
     return pd.concat(dfs, **kwargs)
 
+
+def is_interval_dtype(dtype):
+    return isinstance(dtype, pd.IntervalDtype) or (
+        isinstance(dtype, pd.CategoricalDtype)
+        and isinstance(dtype.categories, pd.IntervalIndex)
+    )
+
+
+def get_interval_mid(series: Series) -> Series:
+    dtype = series.dtype
+    if isinstance(dtype, pd.IntervalDtype):
+        return series.array.mid
+    
+    if (
+        isinstance(dtype, pd.CategoricalDtype)
+        and isinstance(dtype.categories, pd.IntervalIndex)
+    ):
+        return series.cat.rename_categories(series.cat.categories.mid)
+
+    raise ValueError("series must be interval-like, but got {series=}.")
+    

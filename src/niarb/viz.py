@@ -18,14 +18,9 @@ import seaborn as sns
 from seaborn import FacetGrid
 import statsmodels.api as sm
 
+from niarb import utils
+
 logger = logging.getLogger(__name__)
-
-
-def _is_interval_dtype(dtype):
-    return isinstance(dtype, pd.IntervalDtype) or (
-        isinstance(dtype, pd.CategoricalDtype)
-        and isinstance(dtype.categories, pd.IntervalIndex)
-    )
 
 
 def mapped(func, mapping):
@@ -142,11 +137,12 @@ def figplot(
             else:
                 ax.grid(axis=grid)
 
-    # move legend
-    if legend_loc is not None:
-        sns.move_legend(g, legend_loc, **(legend_kwargs or {}))
-    if not legend_title:
-        g.legend.set_title(None)
+    # format legend
+    if g.legend:
+        if legend_loc is not None:
+            sns.move_legend(g, legend_loc, **(legend_kwargs or {}))
+        if not legend_title:
+            g.legend.set_title(None)
 
     # call tight_layout
     if tight_layout:
@@ -156,12 +152,9 @@ def figplot(
 
 
 def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
-    if _is_interval_dtype(data[x].dtype):
+    if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
-        if isinstance(data[x].dtype, pd.IntervalDtype):
-            data[x] = data[x].array.mid
-        else:
-            data[x] = data[x].cat.rename_categories(data[x].cat.categories.mid)
+        data[x] = utils.get_interval_mid(data[x])
     logger.debug(f"data:\n{data}")
     logger.debug(f"data memory usage:\n{data.memory_usage()}")
 
@@ -186,12 +179,9 @@ def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
 
 
 def lmplot(data=None, *, x=None, **kwargs):
-    if _is_interval_dtype(data[x].dtype):
+    if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
-        if isinstance(data[x].dtype, pd.IntervalDtype):
-            data[x] = data[x].array.mid
-        else:
-            data[x] = data[x].cat.rename_categories(data[x].cat.categories.mid)
+        data[x] = utils.get_interval_mid(data[x])
     logger.debug(f"data:\n{data}")
     logger.debug(f"data memory usage:\n{data.memory_usage()}")
 

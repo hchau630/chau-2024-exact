@@ -356,6 +356,7 @@ class V1(torch.nn.Module):
         prob_kernel: Callable[[ParameterFrame, ParameterFrame], Tensor] | None = None,
         N_synapses: float | int = None,
         W_std: float = 0.0,
+        W_max: float = torch.inf,
         seed: int | None = None,
         sparsify_kwargs: dict[str] | None = None,
         nonlinear_kwargs: dict[str] | None = None,
@@ -421,7 +422,8 @@ class V1(torch.nn.Module):
             N_synapses (optional):
                 Expected number of synapses per neuron, must be non-negative. If None, connectivity is dense.
                 If not None, prob_kernel must be None.
-            W_std (optional). Standard deviation (as a fraction of the mean) of connection weight distribution.
+            W_std (optional): Standard deviation (as a fraction of the mean) of connection weight distribution.
+            W_max (optional): Maximum absolute connection strength. Ignored if mode == "analytical".
             seed (optional):
                 Random seed for generating connection weight matrix, only relevant if N_synapses is not None or W_std > 0.
             sparsify_kwargs (optional): keyword arguments passed to weights.sparsify.
@@ -467,6 +469,9 @@ class V1(torch.nn.Module):
 
         if W_std < 0.0:
             raise ValueError(f"W_std must be non-negative, but got {W_std=}.")
+
+        if W_max < 0.0:
+            raise ValueError(f"W_max must be non-negative, but got {W_max=}.")
 
         if prob_kernel is not None and N_synapses is not None:
             raise ValueError(
@@ -552,6 +557,7 @@ class V1(torch.nn.Module):
         self.prob_kernel = prob_kernel
         self.N_synapses = N_synapses
         self.W_std = W_std
+        self.W_max = W_max
         self.seed = seed
         self.sparsify_kwargs = sparsify_kwargs if sparsify_kwargs else {}
         self.nonlinear_kwargs = nonlinear_kwargs if nonlinear_kwargs else {}
@@ -969,6 +975,9 @@ class V1(torch.nn.Module):
             if self.W_std > 0.0:
                 with random.set_seed(self.seed):
                     W = weights.sample_log_normal(W, self.W_std)
+
+            if self.W_max < torch.inf:
+                W = torch.clip(W, min=-self.W_max, max=self.W_max)
 
             if output == "weight":
                 if not to_dataframe:

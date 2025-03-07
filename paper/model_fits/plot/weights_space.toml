@@ -1,5 +1,8 @@
 keep_dataframe_idx = false
-tag_names = ["path", "loss"]
+tag_names = ["loss"]
+
+[dataframes]
+__ignore__ = ["path"]
 
 [dataframes.__matrix__]
 path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
@@ -36,8 +39,8 @@ errorbar = "se"
 err_kws = { linewidth = 0.5 }
 
 [plots.__include__.mapping]
-W = "Connectivity strength"
-connected = "Connection probability"
+W = "Connection strength"
+connected = "Connection prob."
 distance = 'Distance ($\mu$m)'
 postsynaptic_cell_type = "Postsynaptic"
 presynaptic_cell_type = "Presynaptic"

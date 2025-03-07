@@ -107,28 +107,9 @@ def dataframe(
         for k, v in tags.items():
             df[k] = pd.Categorical.from_codes([0] * len(df), categories=(v,))
 
-    if query:
-        df = df.query(query).copy()
-
-    if evals:
-        for k, v in evals.items():
-            df[k] = df.eval(v)
-
-    if rolling and cuts and set(rolling) & set(cuts):
-        raise ValueError("rolling and cuts cannot share keys.")
-
-    if cuts:
-        for k, v in cuts.items():
-            if k in df.columns:
-                df[k] = pd.cut(df[k], bins=v, right=False)
-
-    if rolling:
-        for k, (centers, window) in rolling.items():
-            if k in df.columns:
-                df = utils.rolling(df, k, centers, window)
-
-    if columns:
-        df = df[columns]
+    df = process_dataframe(
+        df, evals=evals, query=query, cuts=cuts, rolling=rolling, columns=columns
+    )
 
     return df
 
@@ -137,13 +118,18 @@ def plot(
     df: DataFrame,
     name: str = "figure",
     query: str | None = None,
+    evals: dict[str, str] | None = None,
+    cuts: dict[str, int | Sequence[int | float]] | None = None,
+    rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
+    columns: Sequence[str] | None = None,
     groupby: str | Sequence[str] | None = None,
     progress: bool = False,
     leave: bool = True,
     **kwargs,
 ) -> dict[str, FacetGrid]:
-    if query:
-        df = df.query(query).copy()
+    df = process_dataframe(
+        df, evals=evals, query=query, cuts=cuts, rolling=rolling, columns=columns
+    )
 
     figs = {}
     if groupby:
@@ -158,3 +144,47 @@ def plot(
         figs[name] = viz.figplot(df, **kwargs)
 
     return figs
+
+
+def process_dataframe(
+    df: DataFrame,
+    query: str | None = None,
+    evals: dict[str, str] | None = None,
+    cuts: dict[str, int | Sequence[int | float]] | None = None,
+    rolling: dict[str, tuple[Sequence[int | float], int | float] | tuple[str, Sequence[int | float], int | float]] | None = None,
+    columns: Sequence[str] | None = None,
+) -> DataFrame:
+    if query:
+        df = df.query(query)
+
+    df = df.copy()
+
+    if evals:
+        for k, v in evals.items():
+            df[k] = df.eval(v)
+
+    if rolling and cuts and set(rolling) & set(cuts):
+        raise ValueError("rolling and cuts cannot share keys.")
+
+    if cuts:
+        for k, v in cuts.items():
+            if k in df.columns:
+                df[k] = pd.cut(df[k], bins=v, right=False)
+
+    if rolling:
+        for k, v in rolling.items():
+            if k not in df.columns:
+                continue
+
+            if len(v) == 3:
+                sf = utils.rolling(df.query(v[0]), k, *v[1:])
+                sf[k] = utils.get_interval_mid(sf[k])
+                df = pd.concat([sf, df.query(f"~({v[0]})")], ignore_index=True)
+            else:
+                df = utils.rolling(df, k, *v)
+
+    if columns:
+        df = df[columns]
+
+    return df
+
