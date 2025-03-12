@@ -149,6 +149,32 @@ def compute_gain(f, vf, create_graph=True, **kwargs):
     return jac.diagonal() if jac.ndim == 2 else jac  # (N,) or ()
 
 
+# Compared to compute_gain, compute_nth_deriv is much faster for large inputs.
+# However compute_nth_deriv requires a bit of warmup time. Furthermore, it cannot
+# handle functions which output multiple elements (such as nn.Match).
+@torch.inference_mode(False)  # see comment in compute_gain
+def compute_nth_deriv(
+    f: Callable[[Tensor, *tuple[Tensor, ...]], Tensor],
+    vf: Tensor,
+    args: tuple[Tensor, ...] = (),
+    n: int = 1,
+) -> Tensor:
+    if n < 1:
+        raise ValueError(f"n must be a positive integer, but {n=}.")
+
+    vf, *args = torch.broadcast_tensors(vf, *args)
+
+    def nth_deriv(x, *args, f=f):
+        for _ in range(n):
+            f = torch.func.grad(f)
+        return f(x, *args)
+
+    for _ in range(vf.ndim):
+        nth_deriv = torch.func.vmap(nth_deriv)
+
+    return nth_deriv(vf, *args)
+
+
 def perturbed_steady_state_approx(
     vf: float | Tensor,
     J: Tensor,
