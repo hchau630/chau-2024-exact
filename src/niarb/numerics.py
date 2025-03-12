@@ -162,8 +162,6 @@ def compute_nth_deriv(
     if n < 1:
         raise ValueError(f"n must be a positive integer, but {n=}.")
 
-    vf, *args = torch.broadcast_tensors(vf, *args)
-
     def nth_deriv(x, *args, f=f):
         for _ in range(n):
             f = torch.func.grad(f)
@@ -172,6 +170,7 @@ def compute_nth_deriv(
     for _ in range(vf.ndim):
         nth_deriv = torch.func.vmap(nth_deriv)
 
+    args = [arg.broadcast_to((*vf.shape, *arg.shape[vf.ndim:])) for arg in args]
     return nth_deriv(vf, *args)
 
 

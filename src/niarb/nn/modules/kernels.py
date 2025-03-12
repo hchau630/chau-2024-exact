@@ -246,9 +246,10 @@ def radial(
 
         def kernel_(self, r: Tensor, *args: Tensor) -> Tensor:
             x_keys, y_keys = self.x_keys, self.y_keys
-            zeros, r_ = torch.zeros_like(r)[..., None], r[..., None]
-            x = {x_keys[0]: zeros} | dict(zip(x_keys[1:], args[: len(x_keys[1:])]))
-            y = {y_keys[0]: r_} | dict(zip(y_keys[1:], args[len(y_keys[1:]) :]))
+            zeros = torch.zeros(r.shape, dtype=r.dtype, device=r.device)[..., None]
+            r_ = r[..., None]
+            x = {x_keys[0]: zeros} | dict(zip(x_keys[1:], args[::2]))
+            y = {y_keys[0]: r_} | dict(zip(y_keys[1:], args[1::2]))
             x, y = ParameterFrame(x, ndim=r.ndim), ParameterFrame(y, ndim=r.ndim)
             return func(x, y)
 

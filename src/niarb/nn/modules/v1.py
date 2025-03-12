@@ -707,6 +707,9 @@ class V1(torch.nn.Module):
 
         """
         f, vf = self.f, self.vf
+        if isinstance(f, nn.Identity):
+            return torch.ones_like(vf)
+
         if isinstance(f, nn.Match):
             f = functools.partial(
                 f.forward,
