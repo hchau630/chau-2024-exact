@@ -3,17 +3,7 @@ import numpy as np
 import pytest
 
 from niarb.special.resolvent import laplace_r
-from niarb.zero_crossing import bisect, find_root
-
-
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-def test_bisect(dtype):
-    func = torch.cos
-    a = torch.tensor(0.0, dtype=dtype)
-    b = torch.tensor([torch.pi / 4, 3 * torch.pi / 4], dtype=dtype)
-    out = bisect(func, a, b)
-    expected = torch.tensor([torch.nan, torch.pi / 2], dtype=dtype)
-    torch.testing.assert_close(out, expected, equal_nan=True)
+from niarb.zero_crossing import find_root
 
 
 @pytest.mark.parametrize("d", list(range(1, 4)))
