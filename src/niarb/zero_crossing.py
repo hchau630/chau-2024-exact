@@ -1,60 +1,14 @@
 from functools import partial
-from collections.abc import Callable
-from typing import Any
 
 import numpy as np
 import torch
-from torch import Tensor
 
+from niarb.optimize.elementwise import bisect
 from niarb.special.resolvent import laplace_r
 
 
 def func(d, r, l0, l1, z, **kwargs):
     return (laplace_r(d, l1, r, **kwargs) - z * laplace_r(d, l0, r, **kwargs)).real
-
-
-def bisect(
-    func: Callable[[Tensor, *tuple[Any]], Tensor],
-    a: Tensor,
-    b: Tensor,
-    args: tuple = (),
-    tol: float | None = None,
-) -> Tensor:
-    """
-    Find a root of a function using the bisection method.
-
-    Args:
-        func: Function to find the root of
-        a: Lower bound of root
-        b: Upper bound of root
-        tol (optional): Tolerance for root
-
-    Returns:
-        Root of the function between a and b. If a and b have the same sign, the output
-        is nan.
-
-    """
-    if (b <= a).any():
-        raise ValueError("b must be greater than a")
-
-    if tol is None:
-        tol = 1e-8 if a.dtype == torch.double and b.dtype == torch.double else 1e-6
-
-    a, b, *args = torch.broadcast_tensors(a, b, *args)
-    out = torch.full_like(a, torch.nan)
-    fa, fb = func(a, *args), func(b, *args)
-    valid = fa * fb < 0
-    a, b, fa, fb = a[valid], b[valid], fa[valid], fb[valid]
-    args = [arg[valid] for arg in args]
-    while (b - a > tol).any():
-        c = (a + b) / 2
-        fc = func(c, *args)
-        left = fa * fc < 0
-        right = ~left
-        b[left], fb[left] = c[left], fc[left]
-        a[right], fa[right] = c[right], fc[right]
-    out[valid] = (a + b) / 2
-    return out
 
 
 def find_root(

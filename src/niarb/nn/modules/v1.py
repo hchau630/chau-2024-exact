@@ -354,6 +354,7 @@ class V1(torch.nn.Module):
         mode: str = "analytical",
         approx_order: int = 2,
         prob_kernel: Callable[[ParameterFrame, ParameterFrame], Tensor] | None = None,
+        monotonic_strength: bool = False,
         N_synapses: float | int = None,
         W_std: float = 0.0,
         W_max: float = torch.inf,
@@ -419,6 +420,9 @@ class V1(torch.nn.Module):
             prob_kernel (optional): Kernel function for computing connection probabilities. If None,
                 the network is all-to-all connected. Unused if mode == 'analytical'. If not None,
                 N_synapses must be None.
+            monotonic_strength (optional): If True, connectivity strength is modified to be
+                monotonically decreasing with distance, and "space" must be in self.variables.
+                Unused if prob_kernel is not provided or mode == 'analytical'.
             N_synapses (optional):
                 Expected number of synapses per neuron, must be non-negative. If None, connectivity is dense.
                 If not None, prob_kernel must be None.
@@ -477,6 +481,9 @@ class V1(torch.nn.Module):
             raise ValueError(
                 "prob_kernel and N_synapses cannot be specified simultaneously."
             )
+
+        if monotonic_strength and "space" not in variables:
+            raise ValueError("monotonic_strength requires 'space' in variables.")
 
         cell_types = tuple(
             CellType[ct] if isinstance(ct, str) else ct for ct in cell_types
@@ -555,6 +562,7 @@ class V1(torch.nn.Module):
         self.mode = mode
         self.approx_order = approx_order
         self.prob_kernel = prob_kernel
+        self.monotonic_strength = monotonic_strength
         self.N_synapses = N_synapses
         self.W_std = W_std
         self.W_max = W_max
@@ -950,8 +958,20 @@ class V1(torch.nn.Module):
 
         else:
             kernel = functools.partial(self.resolvent, 0, with_gain=False)
+
+            if self.prob_kernel is not None:
+                W_kernel = lambda x, y: kernel(x, y) / self.prob_kernel(x, y)
+            else:
+                W_kernel = kernel
+
+            if self.monotonic_strength:
+                x_keys = ["space"] + [k for k in self.variables if k != "space"]
+                W_kernel = nn.Monotonic(
+                    nn.radial(func=W_kernel, x_keys=x_keys), "space"
+                )
+
             W = weights.discretize(
-                kernel, x.data[keys], ndim=ndim, dim=cdim
+                W_kernel, x.data[keys], ndim=ndim, dim=cdim
             )  # (*bshape, *, *shape, *shape)
 
             if self.prob_kernel is not None:
@@ -961,8 +981,9 @@ class V1(torch.nn.Module):
                 )
                 if isinstance(W, CirculantTensor):
                     W = W.dense()
-                W = W / prob * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
-            elif self.N_synapses is not None:
+                W = W * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
+
+            if self.N_synapses is not None:
                 # Note: this is currently non-differentiable.
                 mean_p = self.N_synapses / math.prod(x.shape[-ndim:])
                 with random.set_seed(self.seed):
