@@ -300,6 +300,15 @@ class ModifiedBesselK1(torch.autograd.Function):
 
         return grad.mul_(grad_output)
 
+    @staticmethod
+    def vmap(info, in_dims, z):
+        in_dim = in_dims[0]
+        if in_dim is not None:
+            z = z.movedim(in_dim, 0)
+
+        out = ModifiedBesselK1.apply(z)
+        return (out, 0 if in_dim is not None else None)
+
 
 def k0(z: Tensor, **kwargs) -> Tensor:
     dtype = None

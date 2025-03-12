@@ -17,13 +17,13 @@ dependencies = [
     "seaborn",
     "statsmodels",
     "matplotlib",
-    "torch >= 2.4.0, < 2.6.0", # version 2.6.0 is causing a test to fail
+    "torch >= 2.4.0, < 2.6.0",  # version 2.6.0 is causing a test to fail
     "torchdiffeq",
     "hyclib >= 0.1.40",
     "tdfl >= 0.1.15",
     "tqdm",
     "ricciardi >= 0.1.4",
-    "torch-bessel >= 0.0.4",
+    "torch-bessel >= 0.0.5",
 ]
 
 [project.scripts]
