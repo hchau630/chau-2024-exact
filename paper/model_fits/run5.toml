@@ -13,7 +13,7 @@ W_max = 0.5
 __call__ = ["niarb.nn", "Mul"]
 
 [pipeline.model.prob_kernel.f]
-__call__ = ["niarb.nn", "MatrixKernel"]
+__call__ = ["niarb.nn", "Matrix"]
 matrix = [
     [0.1, 0.275],
     [0.225, 0.3],
@@ -24,7 +24,7 @@ x_keys = ["cell_type"]
 __call__ = ["niarb.nn", "Mul"]
 
 [pipeline.model.prob_kernel.g.f]
-__call__ = ["niarb.nn", "GaussianKernel"]
+__call__ = ["niarb.nn", "Gaussian"]
 sigma = [
     [127.0, 97.0],
     [100.0, 127.0],
@@ -32,7 +32,7 @@ sigma = [
 x_keys = ["space", "cell_type"]
 
 [pipeline.model.prob_kernel.g.g]
-__call__ = ["niarb.nn", "TuningKernel"]
+__call__ = ["niarb.nn", "Tuning"]
 kappa = [
     [0.198, 0.0],
     [0.0, 0.0],
