@@ -1,4 +1,5 @@
 from collections.abc import Hashable, Callable
+import math
 
 import torch
 from torch import Tensor
@@ -10,6 +11,8 @@ __all__ = [
     "Sub",
     "Mul",
     "TrueDiv",
+    "Sum",
+    "Prod",
     "Compose",
     "Match",
 ]
@@ -21,30 +24,48 @@ class FunctionMixin:
     """
 
     def __add__(self, g):
+        if g == 0:
+            return self
         return Add(self, g)
 
     def __radd__(self, g):
+        if g == 0:
+            return self
         return Add(self, g)
 
     def __sub__(self, g):
+        if g == 0:
+            return self
         return Sub(self, g)
 
     def __rsub__(self, g):
+        if g == 0:
+            return self
         return Sub(self, g)
 
     def __mul__(self, g):
+        if g == 1:
+            return self
         return Mul(self, g)
 
     def __rmul__(self, g):
+        if g == 1:
+            return self
         return Mul(self, g)
 
     def __truediv__(self, g):
+        if g == 1:
+            return self
         return TrueDiv(self, g)
 
     def __rtruediv__(self, g):
+        if g == 1:
+            return self
         return TrueDiv(self, g)
 
     def __pow__(self, p):
+        if p == 1:
+            return self
         return Compose(Pow(p), self)
 
 
@@ -99,6 +120,24 @@ class Mul(BinOp):
 class TrueDiv(BinOp):
     def forward(self, *args, **kwargs):
         return self.f(*args, **kwargs) / self.g(*args, **kwargs)
+
+
+class Sum(Function):
+    def __init__(self, funcs):
+        super().__init__()
+        self.funcs = torch.nn.ModuleDict(funcs)
+
+    def forward(self, *args, **kwargs):
+        return sum(func(*args, **kwargs) for func in self.funcs.values())
+
+
+class Prod(Function):
+    def __init__(self, funcs):
+        super().__init__()
+        self.funcs = torch.nn.ModuleDict(funcs)
+
+    def forward(self, *args, **kwargs):
+        return math.prod(func(*args, **kwargs) for func in self.funcs.values())
 
 
 class Compose(Function):

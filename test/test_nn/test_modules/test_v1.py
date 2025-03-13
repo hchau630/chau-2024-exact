@@ -265,14 +265,14 @@ class TestV1:
         torch.testing.assert_close(out, expected)
 
     def test_weights_sparse(self):
-        prob_kernel = nn.GaussianKernel(
-            torch.tensor([[100.0, 200.0], [200.0, 100.0]]), ["space", "cell_type"]
+        prob_kernel = nn.Gaussian(
+            nn.Matrix([[100.0, 200.0], [200.0, 100.0]], "cell_type"), "space"
         )
         with random.set_seed(0):
             model = nn.V1(
                 ["cell_type", "space"],
                 cell_types=(CellType.PYR, CellType.PV),
-                prob_kernel=prob_kernel,
+                prob_kernel={"space": prob_kernel},
             )
         x = neurons.as_grid(
             2, (4,), cell_types=(CellType.PYR, CellType.PV), space_extent=(400,)
@@ -305,7 +305,7 @@ class TestV1:
         assert (out_prob >= prob - 2.5 * sem).all()
         assert (out_prob <= prob + 2.5 * sem).all()
 
-        model.prob_kernel = None
+        model.prob_kernel = nn.Prod([])
         expected = model(x, output="weight", ndim=2, to_dataframe=False).dense()
         torch.testing.assert_close(out.mean(dim=0), expected, atol=1e-5, rtol=5e-2)
 

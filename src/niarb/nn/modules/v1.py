@@ -21,6 +21,7 @@ from niarb.cell_type import CellType
 from niarb.tensors import categorical
 from niarb.tensors.periodic import PeriodicTensor
 from niarb.tensors.circulant import CirculantTensor
+from niarb.nn.modules.kernels import Kernel, Radial
 
 logger = logging.getLogger(__name__)
 
@@ -353,8 +354,10 @@ class V1(torch.nn.Module):
         init_stable: bool = False,
         mode: str = "analytical",
         approx_order: int = 2,
-        prob_kernel: Callable[[ParameterFrame, ParameterFrame], Tensor] | None = None,
+        space_strength_kernel: str | Kernel | None = None,
+        prob_kernel: dict[str, Kernel] | None = None,
         monotonic_strength: bool = False,
+        dense: bool = False,
         N_synapses: float | int = None,
         W_std: float = 0.0,
         W_max: float = torch.inf,
@@ -391,7 +394,8 @@ class V1(torch.nn.Module):
                 Sequence of (cell_type_i, cell_type_j) pairs where the connectivity from
                 cell_type_j to cell_type_i is fixed to zero. If None, defaults to the connectivity
                 specified by the 'targets' field of each cell type in cell_types.
-            autapse (optional): Whether or not to allow autapses.
+            autapse (optional): Whether or not to allow autapses. Ignored if space_strength_kernel is
+                not None.
             sigma_optim (optional): Whether or not to optimize sigma. Defaults to True if "space" in variables.
             kappa_optim (optional): Whether or not to optimize kappa. Defaults to True if "ori" in variables.
             vf_optim (optional): Whether or not to optimize vf. Defaults to True if f is not Identity.
@@ -417,24 +421,30 @@ class V1(torch.nn.Module):
             mode (optional): {'analytical', 'matrix', 'matrix_approx', 'numerical'}.
                 Method for computing the perturbation response.
             approx_order (optional): Order of approximation for matrix_approx mode.
-            prob_kernel (optional): Kernel function for computing connection probabilities. If None,
-                the network is all-to-all connected. Unused if mode == 'analytical'. If not None,
-                N_synapses must be None.
+            wrapped_kwargs (optional): keyword arguments passed to functional.wrapped.
+            batch_shape (optional): Shape of model batch dimensions.
+
+            The remaining options are ignored if `mode` == 'analytical':
+            space_strength_kernel (optional): Kernel function for computing spatial connectivity strength.
+                Assumed to be translationally invariant. If None, this is the Laplace kernel divided by
+                prob_kernel["space"].
+            prob_kernel (optional): Dict of kernel functions for computing connection probabilities.
+                space and ori kernels are assumed to be translationally invariant. Keys must be ones of
+                a subset of {"cell_type"} | set(variables). If "cell_type" is not in variables, use
+                "cell_type" to specify the overall probability amplitude.
             monotonic_strength (optional): If True, connectivity strength is modified to be
-                monotonically decreasing with distance, and "space" must be in self.variables.
-                Unused if prob_kernel is not provided or mode == 'analytical'.
+                monotonically decreasing with distance, and prob_kernel["space"] must be a Radial kernel
+                if provided.
+            dense (optional): If True, connectivity is dense, and `N_synapses` must be None.
             N_synapses (optional):
-                Expected number of synapses per neuron, must be non-negative. If None, connectivity is dense.
-                If not None, prob_kernel must be None.
+                Expected number of synapses per neuron, must be non-negative. If not None, `dense` must be False.
             W_std (optional): Standard deviation (as a fraction of the mean) of connection weight distribution.
-            W_max (optional): Maximum absolute connection strength. Ignored if mode == "analytical".
+            W_max (optional): Maximum absolute connection strength.
             seed (optional):
                 Random seed for generating connection weight matrix, only relevant if N_synapses is not None or W_std > 0.
             sparsify_kwargs (optional): keyword arguments passed to weights.sparsify.
             nonlinear_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state_approx.
             simulation_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state.
-            wrapped_kwargs (optional): keyword arguments passed to functional.wrapped.
-            batch_shape (optional): Shape of model batch dimensions.
 
         """
         # validate inputs
@@ -477,13 +487,30 @@ class V1(torch.nn.Module):
         if W_max < 0.0:
             raise ValueError(f"W_max must be non-negative, but got {W_max=}.")
 
-        if prob_kernel is not None and N_synapses is not None:
+        if prob_kernel and not set(prob_kernel.keys()).issubset(
+            ["cell_type"] + variables
+        ):
             raise ValueError(
-                "prob_kernel and N_synapses cannot be specified simultaneously."
+                f"prob_kernel keys must be a subset of {'cell_type'} | set(variables), "
+                f"but got {prob_kernel.keys()=}."
             )
 
-        if monotonic_strength and "space" not in variables:
-            raise ValueError("monotonic_strength requires 'space' in variables.")
+        if (
+            monotonic_strength
+            and "space" in prob_kernel
+            and not isinstance(prob_kernel["space"], Radial)
+        ):
+            raise ValueError(
+                "If monotonic_strength is True and prob_kernel['space'] is provided, "
+                "prob_kernel['space'] must be a Radial kernel, but "
+                f"{type(prob_kernel['space'])=}."
+            )
+
+        if dense and N_synapses is not None:
+            raise ValueError("`N_synapses` must be none if `dense` is True.")
+
+        if wrapped_kwargs is not None:
+            raise NotImplementedError("wrapped_kwargs is not currently implemented.")
 
         cell_types = tuple(
             CellType[ct] if isinstance(ct, str) else ct for ct in cell_types
@@ -551,6 +578,9 @@ class V1(torch.nn.Module):
         if vf_optim is None:
             vf_optim = not isinstance(f, nn.Identity)
 
+        if prob_kernel is None:
+            prob_kernel = {}
+
         super().__init__()
 
         self.variables = list(variables)
@@ -561,9 +591,8 @@ class V1(torch.nn.Module):
         self.autapse = autapse
         self.mode = mode
         self.approx_order = approx_order
-        self.prob_kernel = prob_kernel
-        self.monotonic_strength = monotonic_strength
         self.N_synapses = N_synapses
+        self.dense = dense
         self.W_std = W_std
         self.W_max = W_max
         self.seed = seed
@@ -620,6 +649,59 @@ class V1(torch.nn.Module):
             self.register_buffer("sigma_symmetry", sigma_symmetry, persistent=False)
         else:
             self.sigma_symmetry = sigma_symmetry
+
+        # define model kernels
+        if isinstance(space_strength_kernel, str):
+            space_strength_kernel = getattr(nn, space_strength_kernel)
+            assert isinstance(space_strength_kernel, Kernel)
+
+        has_ct = "cell_type" in self.variables
+
+        space_prob_kernel = prob_kernel.get("space", 1)
+        if space_strength_kernel is None:
+            sqrtS = (
+                nn.Matrix(self.sqrtS, "cell_type") if has_ct else nn.Scalar(self.sqrtS)
+            )
+            if autapse:
+                k = nn.AutapsedLaplace(
+                    sqrtS, ["space", "space_dV"], normalize="integral"
+                )
+            else:
+                k = nn.Laplace(sqrtS, "space", normalize="integral")
+            if monotonic_strength:
+                space_strength_kernel = nn.Monotonic(k / space_prob_kernel, "space")
+                space_product_kernel = space_strength_kernel * space_prob_kernel
+            else:
+                space_product_kernel = k
+                space_strength_kernel = space_product_kernel / space_prob_kernel
+        else:
+            space_product_kernel = space_strength_kernel * space_prob_kernel
+
+        kappa_kernel = (
+            nn.Matrix(self.kappa, "cell_type") if has_ct else nn.Scalar(self.kappa)
+        )
+        if "osi" in variables:
+            kappa_kernel = kappa_kernel * nn.RankOne(self.osi_func, x_keys="osi")
+
+        product_kernel = {
+            "cell_type": (
+                nn.Matrix(self.W, "cell_type") if has_ct else nn.Scalar(self.W)
+            ),
+            "space": space_product_kernel,
+            "ori": nn.Tuning(kappa_kernel, "ori", normalize=True),
+        }
+        strength_kernel = {
+            "cell_type": product_kernel["cell_type"] / prob_kernel.get("cell_type", 1),
+            "space": space_strength_kernel,
+            "ori": product_kernel["ori"] / prob_kernel.get("ori", 1),
+        }
+
+        def filt(x):
+            return x[0] in {"cell_type"} | set(self.variables)
+
+        self.product_kernel = nn.Prod(dict(filter(filt, product_kernel.items())))
+        self.prob_kernel = nn.Prod(dict(filter(filt, prob_kernel.items())))
+        self.strength_kernel = nn.Prod(dict(filter(filt, strength_kernel.items())))
 
         # initialize model parameters
         self.init_gW_std = init_gW_std
@@ -685,6 +767,16 @@ class V1(torch.nn.Module):
             return lambda x: osi_prob.cdf(x) ** self._osi_func
         return self._osi_func
 
+    def W(self, with_gain: bool = False, **kwargs) -> Tensor:
+        W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
+        if not with_gain:
+            W = W / self.gain(**kwargs)[..., None]  # (*batch_shape, n, n)
+        return W
+
+    def sqrtS(self) -> Tensor:
+        batch_shape, n = self.batch_shape, self.n
+        return self.sigma_.broadcast_to(*batch_shape, n, n)
+
     def reset_parameters(self):
         torch.nn.init.constant_(self.vf, self.init_vf)
         nn.init.W_(
@@ -728,9 +820,7 @@ class V1(torch.nn.Module):
         with_gain: bool = True,
         **kwargs,
     ) -> Tensor:
-        W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
-        if not with_gain:
-            W = W / self.gain(**kwargs)[..., None]  # (*batch_shape, n, n)
+        W = self.W(with_gain=with_gain, **kwargs)  # (*batch_shape, n, n)
 
         if self.batch_ndim > 0:
             idx = (slice(None),) * self.batch_ndim + (None,) * x.ndim
@@ -960,30 +1050,28 @@ class V1(torch.nn.Module):
                     dr += dri.squeeze(-1)
 
         else:
-            kernel = functools.partial(self.resolvent, 0, with_gain=False)
-
-            if self.prob_kernel is not None:
-                W_kernel = lambda x, y: kernel(x, y) / self.prob_kernel(x, y)
+            if self.dense or len(self.prob_kernel.funcs) == 0:
+                W = weights.discretize(
+                    self.product_kernel, x.data[keys], ndim=ndim, dim=cdim
+                )  # (*bshape, *, *shape, *shape)
             else:
-                W_kernel = kernel
-
-            if self.monotonic_strength:
-                x_keys = ["space"] + [k for k in self.variables if k != "space"]
-                W_kernel = nn.Monotonic(
-                    nn.radial(func=W_kernel, x_keys=x_keys), "space"
-                )
-
-            W = weights.discretize(
-                W_kernel, x.data[keys], ndim=ndim, dim=cdim
-            )  # (*bshape, *, *shape, *shape)
-
-            if self.prob_kernel is not None:
                 # Note: this is non-differentiable.
                 prob = weights.discretize(
-                    self.prob_kernel, x.data[keys], ndim=ndim, mul_dV=False
+                    self.prob_kernel, x.data[keys], ndim=ndim, dim=cdim, mul_dV=False
                 )
+                W = weights.discretize(
+                    self.strength_kernel, x.data[keys], ndim=ndim, dim=cdim
+                )  # (*bshape, *, *shape, *shape)
+
+                if isinstance(prob, CirculantTensor):
+                    prob = prob.dense()
                 if isinstance(W, CirculantTensor):
                     W = W.dense()
+
+                if (prob < -1e-5).any() or (prob > 1 + 1e-5).any():
+                    raise ValueError("Connection probability must be in [0, 1].")
+                prob = prob.clip(min=0.0, max=1.0)
+
                 W = W * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
 
             if self.N_synapses is not None:

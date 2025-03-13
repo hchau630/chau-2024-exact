@@ -40,33 +40,54 @@ def test_matrix(x, y):
     torch.testing.assert_close(out, expected)
 
 
-def test_gaussian(x, y):
+@pytest.mark.parametrize("normalize", [False, True])
+def test_gaussian(x, y, normalize):
     sigma = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]) / 2).sqrt()
-    kernel = nn.Gaussian(sigma, ["space", "cell_type"])
+    kernel = nn.Gaussian(nn.Matrix(sigma, "cell_type"), "space", normalize=normalize)
     out = kernel(x, y)
     # (x - y)^2 = [0, 1, 1, 4], 2 * sigma^2 = [1, 3, 4, 2]
     expected = torch.exp(-torch.tensor([0, 1 / 3, 1 / 4, 2]))
+    if normalize:
+        expected = expected / (torch.pi * torch.tensor([1, 3, 4, 2])) ** 0.5
     torch.testing.assert_close(out, expected)
 
 
-def test_laplace(x, y):
+@pytest.mark.parametrize("d", [None, 2])
+@pytest.mark.parametrize("normalize", ["none", "origin", "integral"])
+def test_laplace(x, y, d, normalize):
     sigma = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    kernel = nn.Laplace(2, sigma, ["space", "cell_type"])
+    sigma = nn.Matrix(sigma, "cell_type")
+
+    if d == 2 and normalize == "origin":
+        with pytest.raises(ValueError):
+            kernel = nn.Laplace(sigma, "space", d=d, normalize=normalize)
+        return
+
+    kernel = nn.Laplace(sigma, "space", d=d, normalize=normalize)
     out = kernel(x, y)
     # norm(x - y) = [0, 1, 1, 2], sigma = [1, 3, 4, 2]
-    expected = torch.special.modified_bessel_k0(torch.tensor([0, 1 / 3, 1 / 4, 1]))
-    expected[0] = 0.0
-    expected = expected / (2 * torch.pi)
+    if d is None:
+        expected = torch.exp(-torch.tensor([0, 1 / 3, 1 / 4, 1]))
+        if normalize == "none":
+            expected = expected * torch.tensor([1, 3, 4, 2]) / 2
+        elif normalize == "integral":
+            expected = expected / (2 * torch.tensor([1, 3, 4, 2]))
+    else:
+        expected = torch.special.modified_bessel_k0(torch.tensor([0, 1 / 3, 1 / 4, 1]))
+        expected[0] = 0.0
+        if normalize == "none":
+            expected = expected / (2 * torch.pi)
+        else:
+            expected = expected / (2 * torch.pi * torch.tensor([1, 3, 4, 2]) ** 2)
     torch.testing.assert_close(out, expected)
 
 
 def test_monotonic(x, y):
     sigma1 = torch.tensor([[3.0, 4.0], [1.0, 2.0]])
     sigma2 = torch.tensor([[1.5, 1.0], [0.5, 2.0]])
-    keys = ["space", "cell_type"]
-    kernel1 = nn.Laplace(2, sigma1, keys)
-    kernel2 = nn.Gaussian(sigma2, keys)
-    kernel = nn.Monotonic(nn.radial(func=kernel1 / kernel2, x_keys=keys), "space")
+    kernel1 = nn.Laplace(nn.Matrix(sigma1, "cell_type"), "space", d=2)
+    kernel2 = nn.Gaussian(nn.Matrix(sigma2, "cell_type"), "space")
+    kernel = nn.Monotonic(kernel1 / kernel2, "space")
     out = kernel(x, y)
     # norm(x - y) = [0, 1, 1, 2], sigma1 = [3, 1, 2, 4], sigma2 = [1.5, 0.5, 2, 1]
     expected = (kernel1 / kernel2)(x, y)
@@ -79,10 +100,9 @@ def test_monotonic(x, y):
 def test_monotonic_2(x, y):
     sigma1 = torch.tensor([[3.0, 1.5], [1.0, 2.0]])
     sigma2 = sigma1 / 2
-    keys = ["space", "cell_type"]
-    kernel1 = nn.Laplace(2, sigma1, keys)
-    kernel2 = nn.Laplace(0, sigma2, keys)
-    kernel = nn.Monotonic(nn.radial(func=kernel1 / kernel2, x_keys=keys), "space")
+    kernel1 = nn.Laplace(nn.Matrix(sigma1, "cell_type"), "space", d=2)
+    kernel2 = nn.Laplace(nn.Matrix(sigma2, "cell_type"), "space", d=0)
+    kernel = nn.Monotonic(kernel1 / kernel2, "space")
     out = kernel(x, y)
     # norm(x - y) = [0, 1, 1, 2], sigma1 = [3, 1, 2, 1.5], sigma2 = [1.5, 0.5, 1, 0.75]
     expected = (kernel1 / kernel2)(x, y)
@@ -92,34 +112,22 @@ def test_monotonic_2(x, y):
     torch.testing.assert_close(out, expected)
 
 
-def test_radial(x, y):
-    sigma = torch.tensor([[3.0, 1.5], [1.0, 2.0]])
-    keys = ["space", "cell_type"]
-    kernel1 = nn.Laplace(2, sigma, keys)
-    kernel2 = nn.Laplace(0, sigma / 2, keys)
-    kernel = nn.radial(func=kernel1 / kernel2, x_keys=keys)
-    out = kernel(x, y)
-    expected = (kernel1 / kernel2)(x, y)
-    assert isinstance(kernel, nn.Radial)
-    torch.testing.assert_close(out, expected)
-
-
-def test_radial_2(x, y):
-    kernel_ = lambda r: laplace_r(2, 1.0, r) / laplace_r(0, 0.5, r)
-    kernel = nn.radial(kernel=kernel_, x_keys="space")
-    out = kernel(x, y)
-    expected = kernel_((x["space"] - y["space"]).norm(dim=-1))
-    assert isinstance(kernel, nn.Radial)
-    torch.testing.assert_close(out, expected)
+# def test_radial(x, y):
+#     kernel_ = lambda r: laplace_r(2, 1.0, r) / laplace_r(0, 0.5, r)
+#     kernel = nn.radial(kernel=kernel_, x_keys="space")
+#     out = kernel(x, y)
+#     expected = kernel_((x["space"] - y["space"]).norm(dim=-1))
+#     assert isinstance(kernel, nn.Radial)
+#     torch.testing.assert_close(out, expected)
 
 
 def test_piecewise(x, y):
     sigma1 = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]) / 2).sqrt()
-    kernel1 = nn.Gaussian(sigma1, ["space", "cell_type"])
+    kernel1 = nn.Gaussian(nn.Matrix(sigma1, "cell_type"), "space")
     sigma2 = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
-    kernel2 = nn.Laplace(2, sigma2, ["space", "cell_type"])
+    kernel2 = nn.Laplace(nn.Matrix(sigma2, "cell_type"), "space", d=2)
     radius = torch.tensor([[0.5, 1.5], [1.5, 0.5]])
-    kernel = nn.Piecewise(kernel1, kernel2, radius, ["space", "cell_type"])
+    kernel = nn.Piecewise(nn.Matrix(radius, "cell_type"), kernel1, kernel2, "space")
     out = kernel(x, y)
     # norm(x - y) = [0, 1, 1, 2], 2 * sigma1^2 = [1, 3, 4, 2], sigma2 = [1, 3, 4, 2]
     # radius = [0.5, 1.5, 0.5, 1.5]
@@ -142,7 +150,7 @@ def test_piecewise(x, y):
 
 def test_tuning(x, y):
     kappa = torch.tensor([[1.0, 2.0], [3.0, 4.0]]) / 2
-    kernel = nn.Tuning(kappa, ["ori", "cell_type"])
+    kernel = nn.Tuning(nn.Matrix(kappa, "cell_type"), "ori")
     out = kernel(x, y)
     # Δ ori = [45, 90, 0, 45], cos(Δ ori) = [0, -1, 1, 0]
     # 2 * kappa = [1, 3, 4, 2]

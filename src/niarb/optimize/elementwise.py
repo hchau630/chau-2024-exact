@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -83,9 +84,11 @@ def minimize_newton(
     func: Callable[[Tensor, *tuple[Tensor, ...]], Tensor],
     x0: Tensor,
     args: tuple[Tensor, ...] = (),
+    kwargs: dict[str, Any] | None = None,
     bounds: tuple[float | None, float | None] = (None, None),
     maxiter: int = 100,
-    **kwargs,
+    rtol: float = 1e-5,
+    atol: float = 1e-8,
 ) -> Tensor:
     """Use Newton's method to find the minimum of a convex scalar function.
 
@@ -93,11 +96,14 @@ def minimize_newton(
         func: The convex scalar function whose first argument is minimized. Dependence
           on other Tensor arguments MUST be passed through args.
         x0: The initial guess.
-        args (optional): Additional arguments to pass to `func`.
+        args (optional): Additional tensors to pass to `func`. The leading dimensions of
+          each tensor must be broadcastable with `x0`. These tensors are vmapped over.
+        kwargs (optional): Optional arguments passed to `ffunc`. Note that these
+          arguments are NOT vmapped over, unlike `args`.
         bounds (optional): The bounds of the optimization.
         maxiter (optional): The maximum number of iterations.
-        **kwargs: Additional keyword arguments to pass to `torch.allclose` for
-          determining convergence based on step size.
+        rtol (optional): Relative tolerance for convergence criterion based on step size.
+        atol (optional): Absolute tolerance for convergence criterion based on step size.
 
     Returns:
         The minimum of the function.
@@ -106,17 +112,17 @@ def minimize_newton(
     cur = x0
     for _ in range(maxiter):
         prev = cur
-        hessian = numerics.compute_nth_deriv(func, prev, args=args, n=2)
+        hessian = numerics.compute_nth_deriv(func, prev, args=args, kwargs=kwargs, n=2)
         if (hessian <= 0).any():
             raise ValueError("The optimized function is not convex.")
 
-        gradient = numerics.compute_nth_deriv(func, prev, args=args, n=1)
+        gradient = numerics.compute_nth_deriv(func, prev, args=args, kwargs=kwargs, n=1)
         cur = prev - gradient / hessian
 
         if bounds != (None, None):
             cur = cur.clip(*bounds)
 
-        if torch.allclose(cur, prev, **kwargs):
+        if torch.allclose(cur, prev, rtol=rtol, atol=atol):
             break
 
     return cur
