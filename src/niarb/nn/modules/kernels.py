@@ -261,6 +261,9 @@ class Matrix(Kernel):
 
     def kernel(self, idx_x: Tensor, idx_y: Tensor) -> Tensor:
         matrix = self.matrix() if callable(self.matrix) else self.matrix
+        if matrix.ndim > 2:
+            # handle batch dimensions
+            return matrix[..., idx_x, idx_y]
         # Weird indexing due to vmap bug: https://github.com/pytorch/pytorch/issues/124423
         return matrix[idx_x[None], idx_y[None]][0]
 
@@ -303,10 +306,15 @@ class AutapsedLaplace(Radial):
         self.normalize = normalize
 
     def kernel(
-        self, r: Tensor, _: Tensor, space_dV: Tensor, sigma: Tensor, d: int
+        self,
+        r: Tensor,
+        _: Tensor | Number,
+        space_dV: Tensor | Number,
+        sigma: Tensor,
+        d: int,
     ) -> Tensor:
         d = d if self.d is None else self.d
-        dr = special.ball_radius(d, space_dV)
+        dr = special.ball_radius(d, space_dV) if d > 1 else 0
         out = laplace_r(d, 1 / sigma, r, dr=dr, is_sqrt=True, validate_args=False)
         if self.normalize == "origin":
             if d > 1:
@@ -324,8 +332,7 @@ class Laplace(AutapsedLaplace):
     n = 1
 
     def kernel(self, r: Tensor, sigma: Tensor, d: int) -> Tensor:
-        zero = torch.tensor(0, dtype=r.dtype, device=r.device)
-        return super().kernel(r, zero, zero, sigma, d)
+        return super().kernel(r, 0, 0, sigma, d)
 
 
 class Monotonic(Radial):
