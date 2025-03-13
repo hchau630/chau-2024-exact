@@ -732,15 +732,17 @@ class TestV1:
                 configs=[
                     dict(N=10, cell_probs={"PYR": 1.0}, space=("uniform", 500.0)),
                     dict(N=10, cell_probs={"PV": 1.0}, space=("uniform", 500.0)),
+                    dict(N=10, space=("uniform", 500.0)),
                 ]
             ),
             seed=0,
+            N_instantiations=2,
         )
 
         dataloader = DataLoader(dataset, batch_size=len(dataset), collate_fn=collate_fn)
         x, kwargs = next(iter(dataloader))
-        assert x.shape == (1, 2, 200)
-        x_batch_shape = (1, 2)
+        assert x.shape == (2, 3, 200)
+        x_batch_shape = (2, 3)
 
         model.to(torch.double)
         batched_model.to(torch.double)
