@@ -1,15 +1,37 @@
 batch_size = 1
-dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
+# dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
+
+[dataset]
+abs_window = [600.0, 600.0]
+N_instantiations = 10
+
+[dataset.neurons]
+N = 15000
+variables = ["cell_type", "space", "ori"]
+cell_types = ["PYR", "PV"]
+cell_probs = [0.85, 0.15]
+space_extent = [900.0, 900.0]
+min_dist = 3.0
+w_dims = []
+
+[dataset.perturbations.configs.__matrix__]
+N = [1]
+cell_probs = [{ PYR = 1.0 }]
+space = [["uniform", [550.0, 550.0]]]
+repeats = [5]
+
+[dataset.metrics]
+distance = "min_distance_to_ensemble"
+rel_ori = "abs_relative_ori"
 
 [pipeline.model]
 __ref__ = ["fit.toml", "validation_pipeline", "model"]
+dense = false
 monotonic_strength = true
 
-[pipeline.model.prob_kernel]
-__call__ = ["niarb.nn", "Mul"]
-
-[pipeline.model.prob_kernel.f]
+[pipeline.model.prob_kernel.cell_type]
 __call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
 # Campagnola et al. (2022):
 # - E -> E: pmax = 0.1
 # - E -> I: pmax = 0.225
@@ -19,30 +41,34 @@ matrix = [
     [0.1, 0.275],
     [0.225, 0.3],
 ]
-x_keys = ["cell_type"]
 
-[pipeline.model.prob_kernel.g]
-__call__ = ["niarb.nn", "Mul"]
-
-[pipeline.model.prob_kernel.g.f]
+[pipeline.model.prob_kernel.space]
 __call__ = ["niarb.nn", "Gaussian"]
+x_keys = ["space"]
+
+[pipeline.model.prob_kernel.space.sigma]
+__call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
 # Fit to Rossi et al. (2020) with gaussian kernel:
 # - E -> E: sigma = 144.9 μm
 # - I -> E: sigma = 107.8 μm
 # Assume E -> I same width as I -> E, I -> I same with as E -> E
-sigma = [
+matrix = [
     [144.9, 107.8],
     [107.8, 144.9],
 ]
-x_keys = ["space", "cell_type"]
 
-[pipeline.model.prob_kernel.g.g]
+[pipeline.model.prob_kernel.ori]
 __call__ = ["niarb.nn", "Tuning"]
-kappa = [
+x_keys = ["ori"]
+
+[pipeline.model.prob_kernel.ori.kappa]
+__call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
+matrix = [
     [0.198, 0.0],
     [0.0, 0.0],
 ]
-x_keys = ["ori", "cell_type"]
 
 [state_dict]
 __call__ = ["niarb.io", "load_state_dict"]
