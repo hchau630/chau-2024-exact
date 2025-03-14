@@ -1,6 +1,6 @@
 __ref__ = ["run.toml"]
 dataset.abs_window = [600.0, 600.0]
-dataset.neurons = { __ref__ = ["fit.toml", "validation_dataset", "neurons"] }
+dataset.neurons = { __ref__ = ["run.toml", "dataset", "neurons"] }
 dataset.model_kwargs = { output = "weight" }
 
 [state_dict]

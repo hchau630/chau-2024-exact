@@ -16,8 +16,11 @@ evals = { connected = "W != 0", W = "W.abs()" }
 cuts = { distance = 50 }
 columns = ["loss", "W", "connected", "distance", "postsynaptic_cell_type", "presynaptic_cell_type"]
 
+[plots]
+__ignore__ = ["plot_type"]
+
 [plots.__matrix__]
-y = ["W", "connected"]
+plot_type = ["strength", "probability", "product"]
 
 [[plots.__include__]]
 func = "relplot"
@@ -47,11 +50,18 @@ presynaptic_cell_type = "Presynaptic"
 loss = "Loss"
 
 [[plots.__include__]]
+plot_type = "strength"
 name = { __format__ = "connection_strength_space_{INDICES}" }
 query = "W > 0"
 y = "W"
 
 [[plots.__include__]]
+plot_type = "probability"
 name = { __format__ = "connection_probability_space_{INDICES}" }
 y = "connected"
+
+[[plots.__include__]]
+plot_type = "product"
+name = { __format__ = "connection_product_space_{INDICES}" }
+y = "W"
 
