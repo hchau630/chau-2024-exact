@@ -344,8 +344,26 @@ class Monotonic(Radial):
         self.x0 = x0
 
     def kernel(self, r: Tensor, *args: Tensor, **kwargs) -> Tensor:
-        x0 = torch.full_like(r, self.x0)
-        rmin = elementwise.minimize_newton(self.f.kernel, x0, args=args, kwargs=kwargs)
+        if len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
+            # in my use case there are very few unique elements in args,
+            # so it is more efficient to minimize the function with respect to
+            # only the unique elements
+            uargs = torch.broadcast_tensors(*args)
+            shape = uargs[0].shape
+            uargs = torch.stack([arg.flatten() for arg in uargs])
+            uargs, inverse = torch.unique(uargs, return_inverse=True, dim=1)
+            uargs, inverse = tuple(uargs), inverse.reshape(shape)
+            x0 = torch.full(uargs[0].shape, self.x0, dtype=r.dtype, device=r.device)
+        else:
+            uargs = ()
+            x0 = torch.tensor(self.x0, dtype=r.dtype, device=r.device)
+        rmin = elementwise.minimize_newton(self.f.kernel, x0, args=uargs, kwargs=kwargs)
+        if len(args) > 0:
+            rmin = rmin[inverse]
+        else:
+            rmin = rmin.broadcast_to(r.shape)
+        # x0 = torch.full_like(r, self.x0)
+        # rmin = elementwise.minimize_newton(self.f.kernel, x0, args=args, kwargs=kwargs)
         mask = r > rmin
         r[mask] = rmin[mask]
         return self.f.kernel(r, *args, **kwargs)
