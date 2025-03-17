@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from niarb.special.resolvent import laplace_r
-from niarb.viz import figplot
+from niarb.viz import figplot, sample_df
 
 
 def integrand(d, sigma, r):
@@ -128,7 +128,9 @@ def main():
         choices=["bessel", "gaussian", "real_resp", "cplx_resp"],
         default="bessel",
     )
+    parser.add_argument("--query", "-q", type=str)
     parser.add_argument("--min-dist", "-m", type=float, default=0)
+    parser.add_argument("--max-dist", "-M", type=float, default=np.inf)
     parser.add_argument("--bootstraps", "-B", type=int)
     parser.add_argument("--binned", "-b", action="store_true")
     parser.add_argument("--bins", "-n", type=int)
@@ -146,17 +148,20 @@ def main():
     if args.kernel in {"bessel", "gaussian"}:
         p0 = [args.s0]
         bounds = ([0], [np.inf])
-        fit_label = r"$W_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$W_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        fit_label = r"$W_{\alpha \beta}(r)$"
         y_label = r"E/IPSP $\times$ prob. (mV)"
     elif args.kernel == "real_resp":
         p0 = [args.s0, args.s1, args.c]
         bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
-        fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     elif args.kernel == "cplx_resp":
         p0 = [args.s0, args.ltheta, args.ctheta]
         bounds = ([0, -np.pi, -np.pi], [np.inf, np.pi, np.pi])
-        fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     else:
         raise ValueError(f"Unknown kernel: {args.kernel}")
@@ -169,14 +174,28 @@ def main():
         if data.ndim != 2:
             raise ValueError("Data must be 2D")
 
-        if data.shape[-1] not in {2, 3}:
-            raise ValueError("Data must have 2 or 3 columns")
+        if data.shape[-1] not in {2, 3, 4}:
+            raise ValueError("Data must have 2, 3, or 4 columns")
 
+        yerr, ylow, yhigh = None, None, None
         if data.shape[-1] == 2:
             x, y = data.T
-            yerr = None
-        else:
+        elif data.shape[-1] == 3:
             x, y, yerr = data.T
+        else:
+            x, y, ylow, yhigh = data.T
+            yerr = (yhigh - ylow) / 2
+
+        mask = np.isfinite(y)
+        if yerr is not None:
+            mask &= np.isfinite(yerr)
+        if ylow is not None:
+            mask &= np.isfinite(ylow) & np.isfinite(yhigh)
+        x, y = x[mask], y[mask]
+        if yerr is not None:
+            yerr = yerr[mask]
+        if ylow is not None:
+            ylow, yhigh = ylow[mask], yhigh[mask]
 
         if args.binned:
             if yerr is not None:
@@ -186,10 +205,10 @@ def main():
                 if not np.allclose(np.diff(x, n=2), 0):
                     raise ValueError("Data must be binned")
             else:
-                df = pd.DataFrame({"x": x, "y": y})
-                df["x"] = pd.cut(df["x"], bins=args.bins)
-                df = df.groupby("x", as_index=False)["y"].mean()
-                x, y = pd.IntervalIndex(df["x"]).mid, df["y"]
+                sf = pd.DataFrame({"x": x, "y": y})
+                sf["x"] = pd.cut(sf["x"], bins=args.bins)
+                sf = sf.groupby("x", as_index=False)["y"].mean()
+                x, y = pd.IntervalIndex(sf["x"]).mid, sf["y"]
                 x, y = x.to_numpy(), y.to_numpy()
             binwidth = x[1] - x[0]
 
@@ -205,8 +224,8 @@ def main():
             if args.kernel != "gaussian":
                 kernel = partial(kernel, args.d)
 
-        # only fit to data where x >= min_dist
-        mask = x >= args.min_dist
+        # only fit to data where x >= min_dist and x <= max_dist
+        mask = (x >= args.min_dist) & (x <= args.max_dist)
 
         # initialize amplitude such that norm(kernel(x[mask], *p0)) == norm(y[mask])
         a = np.linalg.norm(y[mask], ord=args.ord) / np.linalg.norm(
@@ -237,7 +256,9 @@ def main():
         print(info[-1])
 
         s[filename.stem] = (popt[0], pcov[0, 0] ** 0.5)
-        df[(filename.stem, "data")] = pd.DataFrame({"x": x, "y": y})
+        df[(filename.stem, "data")] = pd.DataFrame(
+            {"x": x, "y": y, "yerr": yerr, "ylow": ylow, "yhigh": yhigh}
+        )
         df[(filename.stem, fit_label)] = pd.DataFrame({"x": x, "y": kernel(x, *popt)})
 
     s_gmean = math.prod(si[0] for si in s.values()) ** (1 / len(s))
@@ -246,8 +267,16 @@ def main():
     print(info[-1])
 
     df = pd.concat(df, names=["filename", "kind"]).reset_index(level=[0, 1])
-    df["filename"] = df["filename"].replace({"EI": r"I $\to$ E", "IE": r"E $\to$ I"})
-    # print(df)
+    df["filename"] = df["filename"].replace(
+        {"EE": r"E → E", "EI": r"I → E", "IE": r"E → I"}
+    )
+    df = df.query(args.query) if args.query else df
+
+    estimator = "mean" if ylow is None else "median"
+    errorbar = "se" if ylow is None else ("pi", 100)
+    if yerr is not None:
+        yerr_name = "yerr" if ylow is None else ("ylow", "yhigh")
+        df = sample_df(df, estimator=estimator, errorbar=errorbar, yerr=yerr_name)
 
     g = figplot(
         df,
@@ -264,6 +293,8 @@ def main():
         aspect=1.25,
         mapping={"x": "Distance (μm)", "y": y_label},
         grid="yzero",
+        estimator=estimator,
+        errorbar=errorbar,
     )
 
     # get rid of legend subtitles, very ugly

@@ -20,22 +20,38 @@ def test_histogram_bin_edges(min, max, bins, expected):
     np.testing.assert_allclose(out, expected)
 
 
-@pytest.mark.parametrize("errorbar", ["se", "sd"])
-def test_sample_df(errorbar):
+@pytest.mark.parametrize("estimator", ["mean", "median"])
+@pytest.mark.parametrize("errorbar", ["se", "sd", ("pi", 100)])
+def test_sample_df(estimator, errorbar):
     df = pd.DataFrame(
         {
             "x": [1, 2, 3],
             "y": [0.5, 1.0, 1.5],
             "yerr": [0.1, 0.2, 0.3],
+            "ylow": [0.4, 0.8, 1.2],
+            "yhigh": [0.8, 1.4, 2.0],
         }
     )
-    out = viz.sample_df(df, errorbar=errorbar)
+    yerr = "yerr" if errorbar in {"se", "sd"} else ("ylow", "yhigh")
 
-    errorbar = {"se": "sem", "sd": "std"}[errorbar]
-    out = out.groupby("x", observed=True, as_index=False)["y"].agg(
-        y="mean", yerr=errorbar
-    )
-    pd.testing.assert_frame_equal(out, df)
+    if estimator == "mean" and errorbar == ("pi", 100):
+        with pytest.raises(ValueError):
+            viz.sample_df(df, yerr=yerr, estimator=estimator, errorbar=errorbar)
+        return
+
+    out = viz.sample_df(df, yerr=yerr, estimator=estimator, errorbar=errorbar)
+
+    if errorbar in {"se", "sd"}:
+        errorbar = {"se": "sem", "sd": "std"}[errorbar]
+        out = out.groupby("x", observed=True, as_index=False)["y"].agg(
+            y=estimator, yerr=errorbar
+        )
+        pd.testing.assert_frame_equal(out, df[["x", "y", "yerr"]])
+    else:
+        out = out.groupby("x", observed=True, as_index=False)["y"].agg(
+            y=estimator, ylow="min", yhigh="max"
+        )
+        pd.testing.assert_frame_equal(out, df[["x", "y", "ylow", "yhigh"]])
 
 
 def test_sample_df_index():
