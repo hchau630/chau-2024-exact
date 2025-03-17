@@ -97,17 +97,23 @@ def test_monotonic(x, y):
     torch.testing.assert_close(out, expected)
 
 
-def test_monotonic_2(x, y):
-    sigma1 = torch.tensor([[3.0, 1.5], [1.0, 2.0]])
+@pytest.mark.parametrize("keep_norm", [False, True])
+def test_monotonic_2(x, y, keep_norm):
+    sigma1 = torch.tensor([[1.0, 1.5], [1.0, 1.5]])
     sigma2 = sigma1 / 2
     kernel1 = nn.Laplace(nn.Matrix(sigma1, "cell_type"), "space", d=2)
     kernel2 = nn.Laplace(nn.Matrix(sigma2, "cell_type"), "space", d=0)
-    kernel = nn.Monotonic(kernel1 / kernel2, "space")
+    kernel = nn.Monotonic(kernel1 / kernel2, "space", keep_norm=keep_norm)
     out = kernel(x, y)
-    # norm(x - y) = [0, 1, 1, 2], sigma1 = [3, 1, 2, 1.5], sigma2 = [1.5, 0.5, 1, 0.75]
+    # norm(x - y) = [0, 1, 1, 2], sigma1 = [1, 1, 1.5, 1.5], sigma2 = [0.5, 0.5, 0.75, 0.75]
     expected = (kernel1 / kernel2)(x, y)
-    expected[1] = 0.934132  # calculated with Mathematica
+    orig = expected.clone()
+    if not keep_norm:
+        expected[1] = 0.934132  # calculated with Mathematica
     expected[3] = 0.41517  # calculated with Mathematica
+    if keep_norm:
+        expected[2:] = expected[2:] * orig[2:].sum() / expected[2:].sum()
+        assert expected[2:].sum() == orig[2:].sum()
 
     torch.testing.assert_close(out, expected)
 
