@@ -28,13 +28,13 @@ normalize = "origin"
 [pipeline.model.prob_kernel.space.sigma]
 __call__ = ["niarb.nn", "Matrix"]
 x_keys = ["cell_type"]
-# Fit to Rossi et al. (2020) with d = 0 kernel with max distance 300 μm:
-# - E -> E: sigma = 110.6 μm
-# - I -> E: sigma = 73.1 μm
+# Fit to Rossi et al. (2020) with d = 0 kernel:
+# - E -> E: sigma = 109.3 μm
+# - I -> E: sigma = 81.0 μm
 # Assume E -> I same width as I -> E, I -> I same with as E -> E
 matrix = [
-    [110.6, 73.1],
-    [73.1, 110.6],
+    [109.3, 81.0],
+    [81.0, 109.3],
 ]
 
 [pipeline.model.prob_kernel.ori]

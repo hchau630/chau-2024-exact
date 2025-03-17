@@ -365,6 +365,7 @@ class V1(torch.nn.Module):
         sparsify_kwargs: dict[str] | None = None,
         nonlinear_kwargs: dict[str] | None = None,
         simulation_kwargs: dict[str] | None = None,
+        monotonic_kwargs: dict[str] | None = None,
         wrapped_kwargs: dict[str] | None = None,
         batch_shape: Sequence[int] = (),
     ):
@@ -445,6 +446,8 @@ class V1(torch.nn.Module):
             sparsify_kwargs (optional): keyword arguments passed to weights.sparsify.
             nonlinear_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state_approx.
             simulation_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state.
+            monotonic_kwargs (optional): keyword arguments passed to nn.Monotonic.
+                Ignored if monotonic_strenght is False.
 
         """
         # validate inputs
@@ -581,6 +584,9 @@ class V1(torch.nn.Module):
         if prob_kernel is None:
             prob_kernel = {}
 
+        if monotonic_kwargs is None:
+            monotonic_kwargs = {}
+
         super().__init__()
 
         self.variables = list(variables)
@@ -669,7 +675,9 @@ class V1(torch.nn.Module):
             else:
                 k = nn.Laplace(sqrtS, "space", normalize="integral")
             if monotonic_strength:
-                space_strength_kernel = nn.Monotonic(k / space_prob_kernel, "space")
+                space_strength_kernel = nn.Monotonic(
+                    k / space_prob_kernel, "space", **monotonic_kwargs
+                )
                 space_product_kernel = space_strength_kernel * space_prob_kernel
             else:
                 space_product_kernel = k

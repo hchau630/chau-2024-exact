@@ -1,0 +1,24 @@
+__ref__ = ["run.toml"]
+dataset.abs_window = [600.0, 600.0]
+dataset.neurons = { __ref__ = ["run.toml", "dataset", "neurons"] }
+dataset.model_kwargs = { output = "weight" }
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/weights/{filename}.feather"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+

@@ -20,21 +20,19 @@ matrix = [
 ]
 
 [pipeline.model.prob_kernel.space]
-__call__ = ["niarb.nn", "Laplace"]
+__call__ = ["niarb.nn", "Gaussian"]
 x_keys = ["space"]
-d = 0
-normalize = "origin"
 
 [pipeline.model.prob_kernel.space.sigma]
 __call__ = ["niarb.nn", "Matrix"]
 x_keys = ["cell_type"]
-# Fit to Rossi et al. (2020) with d = 0 kernel with max distance 300 μm:
-# - E -> E: sigma = 110.6 μm
-# - I -> E: sigma = 73.1 μm
+# Fit to Rossi et al. (2020) with gaussian kernel:
+# - E -> E: sigma = 144.9 μm
+# - I -> E: sigma = 107.8 μm
 # Assume E -> I same width as I -> E, I -> I same with as E -> E
 matrix = [
-    [110.6, 73.1],
-    [73.1, 110.6],
+    [144.9, 107.8],
+    [107.8, 144.9],
 ]
 
 [pipeline.model.prob_kernel.ori]
