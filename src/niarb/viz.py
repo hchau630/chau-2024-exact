@@ -85,7 +85,11 @@ def figplot(
             errordim = [errordim]
 
         estimator = kwargs.get("estimator", "mean")
-        by = [v for k, v in kwargs.items() if k in {"x", "hue", "col", "row", "style"}]
+        by = [
+            v
+            for k, v in kwargs.items()
+            if k in {"x", "hue", "col", "row", "style"} and v is not None
+        ]
         logger.debug(f"{by=}, {errordim=}, {estimator=}")
 
         data = data.groupby(
@@ -163,7 +167,9 @@ def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
     # dataframes such as when plotting weights.
     if errorbar in {"se", "sd", None}:
         by = [x] + [
-            v for k, v in kwargs.items() if k in {"x", "hue", "col", "row", "style"}
+            v
+            for k, v in kwargs.items()
+            if k in {"x", "hue", "col", "row", "style"} and v is not None
         ]
         agg = {y: "mean"}
         if errorbar == "se":
@@ -348,9 +354,10 @@ def histogram_bin_edges(min, max, bins):
 
 def sample_df(
     df: DataFrame,
-    errorbar: str = "se",
+    estimator: str = "mean",
+    errorbar: str | tuple[str, int] = "se",
     y: str = "y",
-    yerr: str = "yerr",
+    yerr: str | tuple[str, str] = "yerr",
     index: str | None = None,
 ) -> DataFrame:
     """Generate 'samples' of dataframe
@@ -360,9 +367,12 @@ def sample_df(
 
     Args:
         df: Dataframe
-        errorbar (optional): {"se", "sd"}. Errorbar type
+        estimator (optional): {"mean", "median"}. Estimator for the target variable.
+        errorbar (optional): {"se", "sd", ("pi", 100)}. Errorbar type. If ("pi", 100),
+          estimator must be "median".
         y (optional): Target variable
-        yerr (optional): Errorbar variable
+        yerr (optional): Errorbar variable. If a tuple, the first element is the
+          lower errorbar and the second element is the upper errorbar.
         index (optional): If not None, create a new column with this name containing
           the indices of the samples.
 
@@ -371,11 +381,30 @@ def sample_df(
 
     """
     df0, df1 = df.copy(), df.copy()
-    scaling = {"se": 3**0.5, "sd": 1}[errorbar]
-    df0[y] = df[y] - df[yerr] * scaling
-    df1[y] = df[y] + df[yerr] * scaling
+    if errorbar in {"se", "sd"}:
+        if not isinstance(yerr, str):
+            raise ValueError(
+                f"yerr must be a string if errorbar is 'se' or 'sd', but {yerr=}."
+            )
+        scaling = {"se": 3**0.5, "sd": 1}[errorbar]
+        df0[y] = df[y] - df[yerr] * scaling
+        df1[y] = df[y] + df[yerr] * scaling
+    else:
+        if not isinstance(yerr, tuple) or len(yerr) != 2:
+            raise ValueError(
+                f"yerr must be a 2-tuple if errorbar == ('pi', 100), but {yerr=}."
+            )
+        if estimator != "median":
+            raise ValueError(
+                "estimator must be 'median' if errorbar == ('pi', 100), but "
+                f"{estimator=}."
+            )
+        df0[y] = df[yerr[0]]
+        df1[y] = df[yerr[1]]
+        yerr = list(yerr)
 
     out = pd.concat(dict(enumerate([df, df0, df1]))).drop(columns=yerr)
+
     if index is not None:
         out = out.reset_index(0, names=index)
 
