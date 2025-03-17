@@ -5,6 +5,7 @@ dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
 __ref__ = ["fit.toml", "validation_pipeline", "model"]
 dense = false
 monotonic_strength = true
+keep_monotonic_norm = true
 
 [pipeline.model.prob_kernel.cell_type]
 __call__ = ["niarb.nn", "Matrix"]
