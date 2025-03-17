@@ -4,6 +4,7 @@ from itertools import chain
 
 import torch
 from torch import Tensor
+import hyclib as lib
 
 from .functions import Function
 from .frame import ParameterFrame
@@ -24,6 +25,7 @@ __all__ = [
     "Piecewise",
     "Tuning",
     "RankOne",
+    "Norm",
     "Radial",
     # "radial",
 ]
@@ -338,13 +340,16 @@ class Laplace(AutapsedLaplace):
 class Monotonic(Radial):
     n = 1
 
-    def __init__(self, f: Radial, *args, x0: float = 1e-5, **kwargs):
+    def __init__(
+        self, f: Radial, *args, x0: float = 1e-5, unique: bool = True, **kwargs
+    ):
         super().__init__(*args, kernels=f.kernels, **kwargs)
         self.f = f
         self.x0 = x0
+        self.unique = unique
 
     def kernel(self, r: Tensor, *args: Tensor, **kwargs) -> Tensor:
-        if len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
+        if self.unique and len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
             # in my use case there are very few unique elements in args,
             # so it is more efficient to minimize the function with respect to
             # only the unique elements
@@ -354,16 +359,19 @@ class Monotonic(Radial):
             uargs, inverse = torch.unique(uargs, return_inverse=True, dim=1)
             uargs, inverse = tuple(uargs), inverse.reshape(shape)
             x0 = torch.full(uargs[0].shape, self.x0, dtype=r.dtype, device=r.device)
-        else:
+        elif len(args) == 0:
             uargs = ()
             x0 = torch.tensor(self.x0, dtype=r.dtype, device=r.device)
-        rmin = elementwise.minimize_newton(self.f.kernel, x0, args=uargs, kwargs=kwargs)
-        if len(args) > 0:
-            rmin = rmin[inverse]
         else:
+            uargs = args
+
+        rmin = elementwise.minimize_newton(self.f.kernel, x0, args=uargs, kwargs=kwargs)
+
+        if self.unique and len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
+            rmin = rmin[inverse]
+        elif len(args) == 0:
             rmin = rmin.broadcast_to(r.shape)
-        # x0 = torch.full_like(r, self.x0)
-        # rmin = elementwise.minimize_newton(self.f.kernel, x0, args=args, kwargs=kwargs)
+
         mask = r > rmin
         r[mask] = rmin[mask]
         return self.f.kernel(r, *args, **kwargs)
@@ -423,6 +431,27 @@ class RankOne(Kernel):
 
     def kernel(self, x: Tensor, y: Tensor) -> Tensor:
         return self.f(x) * self.g(y)
+
+
+class Norm(Kernel):
+    n = 1
+
+    def __init__(
+        self, f: Callable[[Tensor], Tensor], *args, ord: int | float = 2, **kwargs
+    ):
+        super().__init__(*args, **kwargs)
+        self.f = f
+        self.ord = ord
+
+    def forward(self, x: ParameterFrame, y: ParameterFrame) -> Tensor:
+        if self.validate_args:
+            self.validate(x, y)
+
+        out = self.f(x, y)
+        idx_x, idx_y = x.data[self.x_keys[0]], y.data[self.y_keys[0]]
+        idx = idx_x * (idx_y.max() + 1) + idx_y
+        norm = lib.pt.bincount(idx.flatten(), weights=out.flatten().abs() ** self.ord)
+        return (norm ** (1 / self.ord))[idx]
 
 
 # def radial(

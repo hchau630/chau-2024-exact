@@ -4,7 +4,6 @@ import pytest
 from niarb import nn
 from niarb.nn.modules import frame
 from niarb.tensors import periodic
-from niarb.special.resolvent import laplace_r
 
 
 @pytest.fixture
@@ -155,4 +154,28 @@ def test_tuning(x, y):
     # Δ ori = [45, 90, 0, 45], cos(Δ ori) = [0, -1, 1, 0]
     # 2 * kappa = [1, 3, 4, 2]
     expected = torch.tensor([1.0, -2.0, 5.0, 1.0])
+    torch.testing.assert_close(out, expected)
+
+
+def test_norm():
+    x = frame.ParameterFrame(
+        {
+            "space": torch.tensor([[0.0], [1.0], [2.0], [3.0], [4.0]]),
+            "cell_type": torch.tensor([0, 1, 1, 0, 0]),
+        }
+    )
+    y = frame.ParameterFrame(
+        {
+            "space": torch.tensor([[0.0], [2.0], [1.0], [5.0], [3.0]]),
+            "cell_type": torch.tensor([0, 0, 1, 1, 0]),
+        }
+    )
+    sigma = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]) / 2).sqrt()
+    kernel = nn.Gaussian(nn.Matrix(sigma, "cell_type"), "space")
+    out = nn.Norm(kernel, "cell_type", ord=1)(x, y)
+    # (x - y)^2 = [0, 1, 1, 4, 1], 2 * sigma^2 = [1, 3, 4, 2, 1]
+    expected = torch.exp(-torch.tensor([0, 1 / 3, 1 / 4, 2, 1]))
+    norm0 = expected[0] + expected[-1]
+    expected[0] = norm0
+    expected[-1] = norm0
     torch.testing.assert_close(out, expected)

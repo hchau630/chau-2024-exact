@@ -357,6 +357,7 @@ class V1(torch.nn.Module):
         space_strength_kernel: str | Kernel | None = None,
         prob_kernel: dict[str, Kernel] | None = None,
         monotonic_strength: bool = False,
+        keep_monotonic_norm: bool = False,
         dense: bool = False,
         N_synapses: float | int = None,
         W_std: float = 0.0,
@@ -436,6 +437,10 @@ class V1(torch.nn.Module):
             monotonic_strength (optional): If True, connectivity strength is modified to be
                 monotonically decreasing with distance, and prob_kernel["space"] must be a Radial kernel
                 if provided.
+            keep_monotonic_norm (optional): If True, the monotonic kernel is scaled such that the
+                norm of the product of the monotonic strength kernel and the probability kernel
+                is equal to the norm of the product of the non-monotonic strength kernel and the
+                probability kernel. Ignored if monotonic_strength is False.
             dense (optional): If True, connectivity is dense, and `N_synapses` must be None.
             N_synapses (optional):
                 Expected number of synapses per neuron, must be non-negative. If not None, `dense` must be False.
@@ -678,6 +683,12 @@ class V1(torch.nn.Module):
                 space_strength_kernel = nn.Monotonic(
                     k / space_prob_kernel, "space", **monotonic_kwargs
                 )
+                if keep_monotonic_norm:
+                    space_strength_kernel = (
+                        space_strength_kernel
+                        * nn.Norm(k, "cell_type", ord=1)
+                        / nn.Norm(space_strength_kernel, "cell_type", ord=1)
+                    )
                 space_product_kernel = space_strength_kernel * space_prob_kernel
             else:
                 space_product_kernel = k
