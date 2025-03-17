@@ -4,7 +4,6 @@ from itertools import chain
 
 import torch
 from torch import Tensor
-import hyclib as lib
 
 from .functions import Function
 from .frame import ParameterFrame
@@ -339,64 +338,35 @@ class Laplace(AutapsedLaplace):
 class Monotonic(Radial):
     n = 1
 
-    def __init__(
-        self,
-        f: Radial,
-        *args,
-        x0: float = 1e-5,
-        keep_norm: bool = False,
-        p: int | float = 1,
-        **kwargs,
-    ):
+    def __init__(self, f: Radial, *args, x0: float = 1e-5, **kwargs):
         super().__init__(*args, kernels=f.kernels, **kwargs)
         self.f = f
         self.x0 = x0
-        self.keep_norm = keep_norm
-        self.p = p
 
     def kernel(self, r: Tensor, *args: Tensor, **kwargs) -> Tensor:
-        # in my use case there are very few unique elements in args, so it is more
-        # efficient to minimize the function with respect to only the unique elements
         if len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
+            # in my use case there are very few unique elements in args,
+            # so it is more efficient to minimize the function with respect to
+            # only the unique elements
             uargs = torch.broadcast_tensors(*args)
             shape = uargs[0].shape
             uargs = torch.stack([arg.flatten() for arg in uargs])
             uargs, inverse = torch.unique(uargs, return_inverse=True, dim=1)
             uargs, inverse = tuple(uargs), inverse.reshape(shape)
             x0 = torch.full(uargs[0].shape, self.x0, dtype=r.dtype, device=r.device)
-        elif len(args) == 0:
+        else:
             uargs = ()
             x0 = torch.tensor(self.x0, dtype=r.dtype, device=r.device)
-        else:
-            uargs = args
-
         rmin = elementwise.minimize_newton(self.f.kernel, x0, args=uargs, kwargs=kwargs)
-
-        if len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
+        if len(args) > 0:
             rmin = rmin[inverse]
-        elif len(args) == 0:
+        else:
             rmin = rmin.broadcast_to(r.shape)
-
-        if self.keep_norm:
-            orig = self.f.kernel(r, *args, **kwargs)
-
+        # x0 = torch.full_like(r, self.x0)
+        # rmin = elementwise.minimize_newton(self.f.kernel, x0, args=args, kwargs=kwargs)
         mask = r > rmin
         r[mask] = rmin[mask]
-        out = self.f.kernel(r, *args, **kwargs)
-
-        if self.keep_norm:
-            if len(args) > 0 and all(arg.ndim == r.ndim for arg in args):
-                # my implementation of bincount differs from torch.bincount in that
-                # it supports backpropagation through the `weights` argument
-                scale = lib.pt.bincount(inverse, orig.abs() ** self.p) ** (1 / self.p)
-                scale /= lib.pt.bincount(inverse, out.abs() ** self.p) ** (1 / self.p)
-                out = out * scale[inverse]
-            elif len(args) == 0:
-                out = out * orig.norm(self.p) / out.norm(self.p)
-            else:
-                raise NotImplementedError("keep_norm not implemented for this case.")
-
-        return out
+        return self.f.kernel(r, *args, **kwargs)
 
 
 class Piecewise(RadialBinOp):
