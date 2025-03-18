@@ -373,8 +373,9 @@ class Monotonic(Radial):
             rmin = rmin.broadcast_to(r.shape)
 
         mask = r > rmin
-        r[mask] = rmin[mask]
-        return self.f.kernel(r, *args, **kwargs)
+        r_ = r.clone()  # avoid mutating r
+        r_[mask] = rmin[mask]
+        return self.f.kernel(r_, *args, **kwargs)
 
 
 class Piecewise(RadialBinOp):

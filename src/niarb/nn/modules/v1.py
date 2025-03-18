@@ -687,7 +687,11 @@ class V1(torch.nn.Module):
                     space_strength_kernel = (
                         space_strength_kernel
                         * nn.Norm(k, "cell_type", ord=1)
-                        / nn.Norm(space_strength_kernel, "cell_type", ord=1)
+                        / nn.Norm(
+                            space_strength_kernel * space_prob_kernel,
+                            "cell_type",
+                            ord=1,
+                        )
                     )
                 space_product_kernel = space_strength_kernel * space_prob_kernel
             else:

@@ -32,6 +32,26 @@ def y():
     )
 
 
+@pytest.fixture
+def x2():
+    return frame.ParameterFrame(
+        {
+            "space": torch.tensor([[0.0], [1.0], [2.0], [3.0], [4.0]]),
+            "cell_type": torch.tensor([0, 1, 1, 0, 0]),
+        }
+    )
+
+
+@pytest.fixture
+def y2():
+    return frame.ParameterFrame(
+        {
+            "space": torch.tensor([[0.5], [2.0], [1.0], [5.0], [5.0]]),
+            "cell_type": torch.tensor([0, 0, 1, 1, 1]),
+        }
+    )
+
+
 def test_matrix(x, y):
     W = nn.Matrix(torch.tensor([[1.0, 2.0], [3.0, 4.0]]), "cell_type")
     out = W(x, y)
@@ -157,25 +177,37 @@ def test_tuning(x, y):
     torch.testing.assert_close(out, expected)
 
 
-def test_norm():
-    x = frame.ParameterFrame(
-        {
-            "space": torch.tensor([[0.0], [1.0], [2.0], [3.0], [4.0]]),
-            "cell_type": torch.tensor([0, 1, 1, 0, 0]),
-        }
-    )
-    y = frame.ParameterFrame(
-        {
-            "space": torch.tensor([[0.0], [2.0], [1.0], [5.0], [3.0]]),
-            "cell_type": torch.tensor([0, 0, 1, 1, 0]),
-        }
-    )
+def test_norm(x2, y2):
     sigma = (torch.tensor([[1.0, 2.0], [3.0, 4.0]]) / 2).sqrt()
     kernel = nn.Gaussian(nn.Matrix(sigma, "cell_type"), "space")
-    out = nn.Norm(kernel, "cell_type", ord=1)(x, y)
-    # (x - y)^2 = [0, 1, 1, 4, 1], 2 * sigma^2 = [1, 3, 4, 2, 1]
-    expected = torch.exp(-torch.tensor([0, 1 / 3, 1 / 4, 2, 1]))
-    norm0 = expected[0] + expected[-1]
-    expected[0] = norm0
-    expected[-1] = norm0
+    out = nn.Norm(kernel, "cell_type", ord=1)(x2, y2)
+    # (x - y)^2 = [0.25, 1, 1, 4, 1], 2 * sigma^2 = [1, 3, 4, 2, 2]
+    expected = torch.exp(-torch.tensor([0.25, 1 / 3, 1 / 4, 2, 1 / 2]))
+    norm = expected[3] + expected[4]
+    expected[3] = norm
+    expected[4] = norm
+    torch.testing.assert_close(out, expected)
+
+
+def test_norm2(x2, y2):
+    sigma1 = torch.tensor([[3.0, 1.5], [1.0, 2.0]])
+    sigma2 = sigma1 / 2
+    prod_kernel = nn.Laplace(nn.Matrix(sigma1, "cell_type"), "space", d=2)
+    prob_kernel = nn.Laplace(nn.Matrix(sigma2, "cell_type"), "space", d=0)
+    strength_kernel = nn.Monotonic(prod_kernel / prob_kernel, "space")
+    kernel = (
+        strength_kernel
+        * nn.Norm(prod_kernel, "cell_type", ord=1)
+        / nn.Norm(strength_kernel * prob_kernel, "cell_type", ord=1)
+    )
+    out = kernel(x2, y2)
+    # norm(x - y) = [0.5, 1, 1, 2, 1], sigma1 = [3, 1, 2, 1.5, 1.5], sigma2 = [1.5, 0.5, 1, 0.75, 0.75]
+    expected = strength_kernel(x2, y2)
+    expected[1] = (
+        expected[1] * prod_kernel(x2, y2)[1] / (expected[1] * prob_kernel(x2, y2)[1])
+    )
+    target_norm = prod_kernel(x2, y2)[3:].sum()
+    current_norm = (expected[3:] * prob_kernel(x2, y2)[3:]).sum()
+    expected[3:] = expected[3:] * target_norm / current_norm
+
     torch.testing.assert_close(out, expected)
