@@ -5,6 +5,7 @@ from torch import Tensor
 import torch_bessel
 import numpy as np
 from scipy import special as scipy_special
+from scipy.special import factorial
 
 from niarb.tensors.periodic import PeriodicTensor
 
@@ -17,7 +18,7 @@ __all__ = [
     "von_mises",
     "ubeta",
     "wrapped",
-    "factorial",
+    # "factorial",
     "yukawa",
     "k0",
     "k1",
@@ -184,8 +185,8 @@ def wrapped(
     return result
 
 
-def factorial(x: Tensor) -> Tensor:
-    return (x + 1).lgamma().exp()
+# def factorial(x: Tensor) -> Tensor:
+#     return (x + 1).lgamma().exp()
 
 
 class Yukawa(torch.autograd.Function):
@@ -392,9 +393,10 @@ def scaled_kd(d: int, z: Tensor) -> Tensor:
 
     if d not in {1, 3}:
         nu = int(abs(d / 2 - 1) - 1 / 2)
-        j = torch.arange(nu + 1, device=z.device)
-        coef = (factorial(j + nu) / (factorial(j) * factorial(-j + nu))).float()
-        out = out * (coef * (2 * z[..., None]) ** (-j)).sum(dim=-1)
+        c = 1
+        for j in range(1, nu + 1):
+            c += factorial(j + nu) / (factorial(j) * factorial(nu - j)) / (2 * z) ** j
+        out *= c
 
     return out
 
