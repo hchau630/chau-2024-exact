@@ -2,7 +2,7 @@ tag_names = ["gain", "path", "loss"]
 
 [dataframes.__matrix__]
 gain = ["1", { __environ__ = "GAIN" }]
-path = { __call__ = ["niarb.io", "iterdir"], path = "fits", pattern = "*.pt", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/resps_gain-1", pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
 
 [[dataframes.__include__]]
 loss = { __eval__ = "float(path)" }

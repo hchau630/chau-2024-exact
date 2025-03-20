@@ -358,6 +358,7 @@ class V1(torch.nn.Module):
         prob_kernel: dict[str, Kernel] | None = None,
         monotonic_strength: bool = False,
         keep_monotonic_norm: bool = False,
+        monotonic_norm_ord: int | float = 1,
         dense: bool = False,
         N_synapses: float | int = None,
         W_std: float = 0.0,
@@ -441,6 +442,7 @@ class V1(torch.nn.Module):
                 norm of the product of the monotonic strength kernel and the probability kernel
                 is equal to the norm of the product of the non-monotonic strength kernel and the
                 probability kernel. Ignored if monotonic_strength is False.
+            monotonic_norm_ord (optional): Order of the vector norm used for `keep_monotonic_norm`.
             dense (optional): If True, connectivity is dense, and `N_synapses` must be None.
             N_synapses (optional):
                 Expected number of synapses per neuron, must be non-negative. If not None, `dense` must be False.
@@ -686,11 +688,11 @@ class V1(torch.nn.Module):
                 if keep_monotonic_norm:
                     space_strength_kernel = (
                         space_strength_kernel
-                        * nn.Norm(k, "cell_type", ord=1)
+                        * nn.Norm(k, "cell_type", ord=monotonic_norm_ord)
                         / nn.Norm(
                             space_strength_kernel * space_prob_kernel,
                             "cell_type",
-                            ord=1,
+                            ord=monotonic_norm_ord,
                         )
                     )
                 space_product_kernel = space_strength_kernel * space_prob_kernel

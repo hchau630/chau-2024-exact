@@ -11,7 +11,7 @@ path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights", pattern = "*
 loss = { __eval__ = "float(path.stem)" }
 func = ["niarb.io", "load_dataframe"]
 filename = { __eval__ = "path" }
-query = "distance < 500"
+query = "distance > 2.5 and distance < 502.5"
 evals = { connected = "W != 0", W = "W.abs()" }
 cuts = { distance = 50 }
 columns = ["loss", "W", "connected", "distance", "postsynaptic_cell_type", "presynaptic_cell_type"]
