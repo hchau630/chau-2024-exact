@@ -4,12 +4,14 @@ import importlib
 import inspect
 import math
 from collections.abc import Sequence, Callable
+from itertools import accumulate
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.axes import Axes
 from matplotlib.text import Text
+from matplotlib.legend import Legend
 from matplotlib.offsetbox import AnchoredText
 import pandas as pd
 from pandas import DataFrame
@@ -350,6 +352,23 @@ def histogram_bin_edges(min, max, bins):
     N_pos = math.ceil(max / binwidth)
     N_neg = bins - N_pos
     return np.linspace(-binwidth * N_neg, binwidth * N_pos, num=bins + 1)
+
+
+def remove_legend_subtitles(ax: Axes, nums: Sequence[int], **kwargs) -> Legend:
+    handles, labels = ax.get_legend_handles_labels()
+    assert len(handles) == len(labels)
+
+    if sum(nums) + len(nums) != len(handles):
+        raise ValueError(
+            f"sum(nums) + len(nums) must equal the number of handles, but "
+            f"{sum(nums) + len(nums)=}, {len(handles)=}."
+        )
+
+    cumnums = {0} | set(accumulate(n + 1 for n in nums))
+    indices = [i for i in range(len(handles)) if i not in cumnums]
+    return ax.legend(
+        [handles[i] for i in indices], [labels[i] for i in indices], **kwargs
+    )
 
 
 def sample_df(

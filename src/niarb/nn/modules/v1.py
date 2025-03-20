@@ -703,7 +703,7 @@ class V1(torch.nn.Module):
             space_product_kernel = space_strength_kernel * space_prob_kernel
 
         kappa_kernel = (
-            nn.Matrix(self.kappa, "cell_type") if has_ct else nn.Scalar(self.kappa)
+            nn.Matrix(self.kappa_, "cell_type") if has_ct else nn.Scalar(self.kappa_)
         )
         if "osi" in variables:
             kappa_kernel = kappa_kernel * nn.RankOne(self.osi_func, x_keys="osi")
@@ -791,6 +791,9 @@ class V1(torch.nn.Module):
                 osi_prob = self.osi_prob
             return lambda x: osi_prob.cdf(x) ** self._osi_func
         return self._osi_func
+
+    def kappa_(self) -> Tensor:
+        return self.kappa
 
     def W(self, with_gain: bool = False, **kwargs) -> Tensor:
         W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)

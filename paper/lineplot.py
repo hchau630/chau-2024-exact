@@ -217,7 +217,6 @@ def response(
             {"sigma": torch.as_tensor(s).reshape(-1, 2), "gW": gWi, "kappa": kappai},
             strict=False,
         )
-        # print(model.state_dict())
         # spectral_summary = model.spectral_summary()
         # print(spectral_summary)
         # if spectral_summary.abscissa > 1:
