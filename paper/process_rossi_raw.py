@@ -23,6 +23,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("dir", type=Path)
     parser.add_argument("-s", type=float, default=np.inf)
+    parser.add_argument(
+        "-n", type=int, default=30000, help="Number of neurons per mm^2"
+    )
     parser.add_argument("--out", "-o", type=Path)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
@@ -119,10 +122,13 @@ def main():
         counts["size"], counts["total"], method="binom_test"
     )
     counts["proportion"] = counts["size"] / counts["total"]
+    counts["size_low"] = counts["proportion_low"] * counts["total"]
+    counts["size_high"] = counts["proportion_high"] * counts["total"]
     counts["dA"] = area(counts["dr_right"], args.s) - area(counts["dr_left"], args.s)
 
     for s in ["", "_low", "_high"]:
         counts[f"density{s}"] = counts[f"proportion{s}"] / counts["dA"]
+        counts[f"prob{s}"] = counts[f"size{s}"] / (args.n * (counts["dA"] / 1e6))
 
     max_density = counts["density"][counts["density"] < np.inf].max()
     for s in ["", "_low", "_high"]:
@@ -133,26 +139,26 @@ def main():
             args.out.mkdir(exist_ok=True)
             np.savetxt(
                 args.out / f"E{cell_type}.csv",
-                sf[["dr", "rel_density", "rel_density_low", "rel_density_high"]],
+                sf[["dr", "prob", "prob_low", "prob_high"]],
                 delimiter=",",
             )
-        print(sf[["dr", "rel_density", "rel_density_low", "rel_density_high"]])
-        plt.plot(sf["dr"], sf["rel_density"], label=cell_type)
+        print(sf[["dr", "prob", "prob_low", "prob_high"]])
+        plt.plot(sf["dr"], sf["prob"], label=cell_type)
         plt.fill_between(
-            sf["dr"],
-            sf["rel_density_low"],
-            sf["rel_density_high"],
-            alpha=0.15,
-            edgecolor=f"C{i}",
+            sf["dr"], sf["prob_low"], sf["prob_high"], alpha=0.15, edgecolor=f"C{i}"
         )
     plt.legend(title="Cell type")
     plt.gca().axhline(
         0, color=rcParams["grid.color"], linewidth=rcParams["grid.linewidth"]
     )
-    plt.ylabel("Density (μm$^{-2}$)")
+    plt.ylabel("Connection probability")
     plt.xlabel("Distance (μm)")
     if args.out:
-        plt.savefig(args.out / "density.pdf", bbox_inches="tight")
+        plt.savefig(
+            args.out / "probability.pdf",
+            bbox_inches="tight",
+            metadata={"Subject": f"command: '{' '.join(sys.argv)}'"},
+        )
     if args.show:
         plt.show()
 
