@@ -304,6 +304,7 @@ def plot_space_ori_response(
         hue="dori",
         style="kind",
         row_order=["0", "1"],
+        style_order=["Theory", "Simulation"],
         errorbar=None,
         height=figsize[1],
         aspect=figsize[0] / figsize[1],
