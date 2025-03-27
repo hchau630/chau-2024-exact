@@ -58,7 +58,7 @@ class TestTensorDataFrameAnalysis:
     @pytest.mark.parametrize("query_df", [None, 'cell_type != "SST"'])
     @pytest.mark.parametrize("estimator", ["mean", "median"])
     @pytest.mark.parametrize("sem", [None, "holo_id"])
-    def test_forward(x, df, query_x, query_df, estimator, sem):
+    def test_forward(self, x, df, query_x, query_df, estimator, sem):
         if query_df:
             df = df.query(query_df)
 
