@@ -140,6 +140,9 @@ def main():
     parser.add_argument("--ltheta", type=float, default=0)
     parser.add_argument("--ctheta", type=float, default=0)
     parser.add_argument("--ord", type=float, default=2)
+    parser.add_argument("-x", type=float, nargs=3)
+    parser.add_argument("--label", "-l", type=str, choices={"W", "G"}, default="W")
+    parser.add_argument("--ylabel", type=str, choices={"prod", "prob"}, default="prod")
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
@@ -148,20 +151,22 @@ def main():
     if args.kernel in {"bessel", "gaussian"}:
         p0 = [args.s0]
         bounds = ([0], [np.inf])
-        # fit_label = r"$W_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
-        fit_label = r"$W_{\alpha \beta}(r)$"
-        y_label = r"E/IPSP $\times$ prob. (mV)"
+        fit_label = r"$W_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$W_{\alpha \beta}(r)$"
+        if args.label == "G":
+            fit_label = f"$G_{args.d}(r; λ)$"
+        y_label = r"E/IPSP $\times$ prob. (mV)" if args.ylabel == "prod" else "Density"
     elif args.kernel == "real_resp":
         p0 = [args.s0, args.s1, args.c]
         bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
-        # fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
-        fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
+        fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     elif args.kernel == "cplx_resp":
         p0 = [args.s0, args.ltheta, args.ctheta]
         bounds = ([0, -np.pi, -np.pi], [np.inf, np.pi, np.pi])
-        # fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
-        fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
+        fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     else:
         raise ValueError(f"Unknown kernel: {args.kernel}")
@@ -259,7 +264,8 @@ def main():
         df[(filename.stem, "data")] = pd.DataFrame(
             {"x": x, "y": y, "yerr": yerr, "ylow": ylow, "yhigh": yhigh}
         )
-        df[(filename.stem, fit_label)] = pd.DataFrame({"x": x, "y": kernel(x, *popt)})
+        x_ = x if args.x is None else np.arange(*args.x)
+        df[(filename.stem, fit_label)] = pd.DataFrame({"x": x_, "y": kernel(x_, *popt)})
 
     s_gmean = math.prod(si[0] for si in s.values()) ** (1 / len(s))
     s_gmean_err = sum((si[1] / si[0]) ** 2 for si in s.values()) ** 0.5 * s_gmean
