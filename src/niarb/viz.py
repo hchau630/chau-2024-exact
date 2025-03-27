@@ -136,11 +136,11 @@ def figplot(
                 ymin, ymax = ax.get_ylim()
                 if ymin < 0 < ymax:  # only add line if 0 is within the limits
                     ax.axhline(0, color=color, linewidth=linewidth)
-            elif grid in ["xzero", "xyzero"]:
+            if grid in ["xzero", "xyzero"]:
                 xmin, xmax = ax.get_xlim()
                 if xmin < 0 < xmax:  # only add line if 0 is within the limits
                     ax.axvline(0, color=color, linewidth=linewidth)
-            else:
+            if grid not in ["xzero", "yzero", "xyzero"]:
                 ax.grid(axis=grid)
 
     # format legend
@@ -157,7 +157,7 @@ def figplot(
     return g
 
 
-def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
+def relplot(data=None, *, x=None, y=None, **kwargs):
     if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
         data[x] = utils.get_interval_mid(data[x])
@@ -167,7 +167,8 @@ def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
     # for some reason seaborn is very memory-inefficient, so manually do groupby
     # if errorbar is "se", "sd", or None. This is important for plotting large
     # dataframes such as when plotting weights.
-    if errorbar in {"se", "sd", None}:
+    if "errorbar" in kwargs and kwargs["errorbar"] in {"se", "sd", None}:
+        errorbar = kwargs["errorbar"]
         by = [x] + [
             v
             for k, v in kwargs.items()
@@ -183,7 +184,7 @@ def relplot(data=None, *, x=None, y=None, errorbar=("ci", 95), **kwargs):
             data = sample_df(data, errorbar=errorbar, y=y, yerr=f"{y}_{errorbar}")
     logger.debug(f"grouped data:\n{data}")
 
-    return sns.relplot(data=data, x=x, y=y, errorbar=errorbar, **kwargs)
+    return sns.relplot(data=data, x=x, y=y, **kwargs)
 
 
 def lmplot(data=None, *, x=None, **kwargs):
