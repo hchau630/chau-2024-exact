@@ -2,6 +2,7 @@ import logging
 import importlib
 from pathlib import Path
 from collections.abc import Iterable, Sequence, Callable
+from typing import Literal
 import pprint
 
 import torch
@@ -41,6 +42,8 @@ def run(
     tag_names: Sequence[str] = (),
     keep_dataframe_idx: bool = True,
     out: Path | str | None = None,
+    file_type: str = "pdf",
+    dpi: float | Literal["figure"] = "figure",
     progress: bool = False,
     show: bool = False,
 ) -> dict[str, FacetGrid]:
@@ -71,9 +74,9 @@ def run(
     if out:
         out = Path(out)
         for k, v in figs.items():
-            path = out / f"{k}.pdf"
+            path = out / f"{k}.{file_type}"
             path.parent.mkdir(exist_ok=True, parents=True)
-            v.savefig(path)
+            v.savefig(path, dpi=dpi)
     if show:
         plt.show()
 
