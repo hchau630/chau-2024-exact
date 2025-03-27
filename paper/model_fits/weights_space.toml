@@ -1,7 +1,15 @@
 __ref__ = ["run.toml"]
-dataset.abs_window = [600.0, 600.0]
 dataset.neurons = { __ref__ = ["run.toml", "dataset", "neurons"] }
 dataset.model_kwargs = { output = "weight" }
+pipeline.model = { __ref__ = ["run.toml", "pipeline", "model"] }
+
+[pipeline.analysis]
+__call__ = ["niarb.nn", "TensorDataFrameAnalysis"]
+query = "distance > 2.5 and distance < 502.5"
+evals = { connected = "W != 0", W = "W.abs()" }
+cuts = { distance = { __array__ = "2.5:502.5:50j" } }
+x = ["distance", "presynaptic_cell_type", "postsynaptic_cell_type"]
+y = "W"
 
 [state_dict]
 __call__ = ["niarb.io", "load_state_dict"]

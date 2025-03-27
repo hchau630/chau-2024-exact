@@ -1,0 +1,25 @@
+__ref__ = ["run.toml"]
+dataset.neurons = { __ref__ = ["run.toml", "dataset", "neurons"] }
+dataset.model_kwargs = { output = "weight", to_dataframe = false }
+pipeline.model = { __ref__ = ["run.toml", "pipeline", "model"] }
+pipeline.analysis = { __call__ = ["niarb.nn", "Eigvals"] }
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/weights_eigvals/{filename}.feather"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+

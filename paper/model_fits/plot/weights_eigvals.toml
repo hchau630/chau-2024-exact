@@ -1,0 +1,32 @@
+file_type = "png"
+dpi = 700
+keep_dataframe_idx = false
+tag_names = ["loss"]
+
+[dataframes]
+__ignore__ = ["path"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights_eigvals", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_dataframe"]
+filename = { __eval__ = "path" }
+
+[[plots]]
+name = { __format__ = "eigvals_{INDICES}" }
+func = "relplot"
+x = "real"
+y = "imag"
+col = "loss"
+col_wrap = 10
+grid = "xyzero"
+height = 1.75
+# aspect = 1.25
+s = 1.0
+linewidth = 0
+
+[plots.mapping]
+loss = "Loss"
+
