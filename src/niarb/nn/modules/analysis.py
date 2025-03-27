@@ -1,5 +1,6 @@
 import logging
 from collections.abc import Iterable, Sequence
+from itertools import chain
 
 import torch
 import pandas as pd
@@ -16,7 +17,7 @@ class DataFrameAnalysis(torch.nn.Module):
     def __init__(
         self,
         x: str | Sequence[str] | pd.DataFrame,
-        y: str,
+        y: str | Sequence[str],
         query: str | None = None,
         evals: dict[str, str] | None = None,
         cuts: dict[str, Sequence[int | float]] | None = None,
@@ -28,7 +29,7 @@ class DataFrameAnalysis(torch.nn.Module):
         Args:
             x: Columns on which data is grouped on. If a DataFrame, groupby results
               are merged with `x`.
-            y: Column to which the estimator is applied.
+            y: Column(s) to which the estimator is applied.
             query (optional): Query to filter data.
             evals (optional): Dictionary of columns to evaluate.
             cuts (optional): Dictionary of columns to cut into bins. Must be None
@@ -68,6 +69,9 @@ class DataFrameAnalysis(torch.nn.Module):
                     cuts[k] = v.cat.categories
                 elif v.dtype.name == "interval":
                     cuts[k] = pd.IntervalIndex(v)
+
+        if isinstance(y, str):
+            y = [y]
 
         groupby = list(x.columns if isinstance(x, pd.DataFrame) else x)
 
@@ -109,16 +113,17 @@ class TensorDataFrameAnalysis(DataFrameAnalysis):
         df = df[:, (torch.stack([df[k] for k in self.groupby]) != -1).all(dim=0)]
 
         # Perform groupby operations
+        agg = {k: (k, self.estimator) for k in self.y}
         if self.sem is not None:
-            df = df.groupby(self.groupby + self.sem)[self.y].agg(self.estimator)
-            out = df.groupby(self.groupby).agg(
-                **{self.y: (self.y, self.estimator), f"{self.y}_se": (self.y, "sem")}
-            )
+            df = df.groupby(self.groupby + self.sem).agg(**agg)
+            agg = ([(k, (k, self.estimator)), (f"{k}_se", (k, "sem"))] for k in self.y)
+            out = df.groupby(self.groupby).agg(**dict(chain.from_iterable(agg)))
             if self.estimator == "median":
-                out[f"{self.y}_se"] = out[f"{self.y}_se"] * (torch.pi / 2) ** 0.5
+                for k in self.y:
+                    out[f"{k}_se"] = out[f"{k}_se"] * (torch.pi / 2) ** 0.5
         else:
             # Note: df.groupby() is likely a bottleneck due to the slow torch.unqiue call
-            out = df.groupby(self.groupby)[self.y].agg(self.estimator)
+            out = df.groupby(self.groupby).agg(**agg)
 
         if isinstance(self.x, pd.DataFrame):
             # Convert CategoricalTensors to numpy arrays before merging
@@ -128,10 +133,11 @@ class TensorDataFrameAnalysis(DataFrameAnalysis):
 
             out = out.merge(self.x, how="right")
 
-        if out[self.y].isnan().any():
-            logger.warning(
-                f"NaNs detected in analysis output\n:{out[:, out[self.y].isnan()]}"
-            )
+        for k in self.y:
+            if out[k].isnan().any():
+                logger.warning(
+                    f"NaNs detected in analysis output\n:{out[:, out[k].isnan()]}"
+                )
 
         return out
 
