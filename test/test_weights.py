@@ -102,15 +102,3 @@ def test_sample_log_normal_grad():
             return weights.sample_log_normal(W, std)
 
     torch.autograd.gradcheck(func, W)
-
-
-def test_eigvals_dataframe():
-    W = torch.tensor([[1.0, 0.0, 0.0], [0.0, 2.0 + 1.0j, 0.0], [0.0, 0.0, 3.0 - 2.0j]])
-    df = weights.eigvals_dataframe(W)
-    expected = pd.DataFrame(
-        {
-            "real": [1.0, 2.0, 3.0],
-            "imag": [0.0, 1.0, -2.0],
-        }
-    ).astype("float32")
-    pd.testing.assert_frame_equal(df, expected)

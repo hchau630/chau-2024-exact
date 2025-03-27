@@ -57,10 +57,14 @@ class Pipeline(NamedSequential):
         model: torch.nn.Module,
         data: Iterable[pd.DataFrame] | None = None,
         scaler: torch.nn.Module | dict | None = None,
+        analysis: torch.nn.Module | None = None,
         y: str = "dr",
         yerr: str = "dr_se",
         estimator: str = "mean",
     ):
+        if data is None == analysis is None:
+            raise ValueError("Exactly one of data or analysis must be provided.")
+
         if scaler is None:
             scaler = {}
 
@@ -84,6 +88,8 @@ class Pipeline(NamedSequential):
                 [TensorDataFrameAnalysis(x=df, y=y, estimator=estimator) for df in data]
             )
             modules["to_tensor"] = ToTensor(var=y)
+        elif analysis:
+            modules["analysis"] = analysis
 
         super().__init__(modules)
 

@@ -43,7 +43,7 @@ def run(
 ) -> DataFrame:
     # handle alternative input types
     if isinstance(state_dict, (str, Path)):
-        state_dict = torch.load(state_dict, map_location="cpu")
+        state_dict = torch.load(state_dict, map_location="cpu", weights_only=True)
 
     if isinstance(dtype, str):
         dtype = getattr(torch, dtype)
@@ -72,17 +72,16 @@ def run(
     rets = []
     for x, kwargs in tqdm(dataloader, desc="batch", disable=not progress):
         x = x.to(device, dtype=dtype)
-        kwargs["model_kwargs"] |= {"to_dataframe": "pandas"}
         logger.debug(f"kwargs: {kwargs}")
         logger.debug(f"x:\n{x}")
 
         try:
             with torch.inference_mode():
-                ret = pipeline[:"model"](x, **kwargs)
+                ret = pipeline(x, **kwargs)
         except exceptions.SimulationError as err:
             logger.warning(f"Simulation failed: {err}.")
         else:
-            rets.append(ret)
+            rets.append(ret.to_pandas())
     ret = pd.concat(rets)
 
     # save output
