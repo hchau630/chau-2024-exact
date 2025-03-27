@@ -106,7 +106,9 @@ class TensorDataFrameAnalysis(DataFrameAnalysis):
         for k, v in self.cuts.items():
             # Note: need to convert to float due to lib.pt._bin_numbers bug with Long input.
             # labels=False with missing_rep=-1 yields the codes of the categories.
-            df[k] = tdfl.cut(df[k].float(), v, labels=False, missing_rep=-1)
+            df[k] = tdfl.cut(
+                df[k].float(), v, labels=False, right=False, missing_rep=-1
+            )
             df[k] = categorical.as_tensor(df[k], categories=list(v) + [torch.nan])
 
         # Filter out all invalid groups first, which would make groupby faster
