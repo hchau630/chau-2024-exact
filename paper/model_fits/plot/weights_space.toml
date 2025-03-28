@@ -1,5 +1,5 @@
 keep_dataframe_idx = false
-tag_names = ["loss"]
+tag_names = ["model", "loss"]
 
 [dataframes]
 __ignore__ = ["path"]
@@ -8,10 +8,21 @@ __ignore__ = ["path"]
 path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights_space", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
 
 [[dataframes.__include__]]
+kind = "model"
 loss = { __eval__ = "float(path.stem)" }
 func = ["niarb.io", "load_dataframe"]
 filename = { __eval__ = "path" }
 evals = { W = "W.abs()" }
+
+[[dataframes.__include__]]
+kind = "data"
+path = { __const__ = "None" }
+func = ["niarb.viz", "sample_df"]
+df = { __call__ = ["pandas", "read_pickle", "data/probability.pkl"] }
+estimator = "median"
+errorbar = ["pi", 100]
+y = "probability"
+yerr = ["low", "high"]
 
 [plots]
 __ignore__ = ["plot_type"]
@@ -33,7 +44,6 @@ color = "black"
 legend_loc = "upper right"
 legend_title = false
 facet_kws = { sharey = false, legend_out = false }
-errorbar = "sd"
 err_kws = { linewidth = 0.5 }
 
 [plots.__include__.mapping]
@@ -47,9 +57,12 @@ presynaptic_cell_type = "Presynaptic"
 plot_type = "probability"
 name = { __format__ = "connection_probability_space_{INDICES}" }
 y = "probability"
+estimator = "median"
+errorbar = ["pi", 100]
 
 [[plots.__include__]]
 plot_type = "product"
 name = { __format__ = "connection_product_space_{INDICES}" }
 y = "W"
+errorbar = "sd"
 
