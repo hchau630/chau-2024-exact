@@ -3,7 +3,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 from scipy import stats
 
 
@@ -11,7 +10,6 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("dir", type=Path)
     parser.add_argument("--bootstrap", "-b", action="store_true")
-    parser.add_argument("--file-type", "-t", choices=["csv", "pkl"], default="csv")
     parser.add_argument("--out", "-o", type=Path)
     args = parser.parse_args()
 
@@ -27,19 +25,9 @@ def main():
             out += stats.bootstrap((data[name].T,), np.mean).confidence_interval
         out = np.stack(out, axis=1)
         if args.out:
+            header = f"command: {' '.join(sys.argv)}"
             args.out.mkdir(exist_ok=True)
-            if args.file_type == "csv":
-                header = f"command: {' '.join(sys.argv)}"
-                np.savetxt(
-                    args.out / f"{filename}.csv", out, delimiter=",", header=header
-                )
-            else:
-                breaks = (out[:-1, 0] + out[1:, 0]) / 2
-                breaks = np.r_[0, breaks, breaks[-1] + breaks[0]]
-                out = pd.DataFrame(out, columns=["distance", "mean", "low", "high"])
-                out["distance"] = pd.IntervalIndex.from_breaks(breaks)
-                out.attrs["command"] = " ".join(sys.argv)
-                out.to_pickle(args.out / f"{filename}.pkl")
+            np.savetxt(args.out / f"{filename}.csv", out, delimiter=",", header=header)
 
 
 if __name__ == "__main__":
