@@ -141,11 +141,19 @@ def main():
     parser.add_argument("--ctheta", type=float, default=0)
     parser.add_argument("--ord", type=float, default=2)
     parser.add_argument("-x", type=float, nargs=3)
+    parser.add_argument("--y-intercept", type=float, nargs="+")
     parser.add_argument("--label", "-l", type=str, choices={"W", "G"}, default="W")
     parser.add_argument("--ylabel", type=str, choices={"prod", "prob"}, default="prod")
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
+
+    if args.y_intercept and len(args.y_intercept) != len(args.filenames):
+        raise ValueError(
+            "If --y-intercept is specified, it must have the same number of values as filenames"
+        )
+    elif not args.y_intercept:
+        args.y_intercept = [None] * len(args.filenames)
 
     # initialize kernel-specific parameters
     if args.kernel in {"bessel", "gaussian"}:
@@ -155,7 +163,9 @@ def main():
         # fit_label = r"$W_{\alpha \beta}(r)$"
         if args.label == "G":
             fit_label = f"$G_{args.d}(r; λ)$"
-        y_label = r"E/IPSP $\times$ prob. (mV)" if args.ylabel == "prod" else "Density"
+        y_label = r"E/IPSP $\times$ prob. (mV)"
+        if args.ylabel == "prob":
+            y_label = "Conn. probability"
     elif args.kernel == "real_resp":
         p0 = [args.s0, args.s1, args.c]
         bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
@@ -173,7 +183,7 @@ def main():
     bounds = (bounds[0] + [0], bounds[1] + [np.inf])
 
     s, df, info = {}, {}, []
-    for filename in args.filenames:
+    for filename, y_intercept in zip(args.filenames, args.y_intercept, strict=True):
         data = np.loadtxt(filename, delimiter=",")
 
         if data.ndim != 2:
@@ -261,11 +271,20 @@ def main():
         print(info[-1])
 
         s[filename.stem] = (popt[0], pcov[0, 0] ** 0.5)
+        scale = y_intercept / kernel(0.0, *popt) if y_intercept else 1.0
         df[(filename.stem, "data")] = pd.DataFrame(
-            {"x": x, "y": y, "yerr": yerr, "ylow": ylow, "yhigh": yhigh}
+            {
+                "x": x,
+                "y": scale * y,
+                "yerr": scale * yerr,
+                "ylow": scale * ylow,
+                "yhigh": scale * yhigh,
+            }
         )
         x_ = x if args.x is None else np.arange(*args.x)
-        df[(filename.stem, fit_label)] = pd.DataFrame({"x": x_, "y": kernel(x_, *popt)})
+        df[(filename.stem, fit_label)] = pd.DataFrame(
+            {"x": x_, "y": scale * kernel(x_, *popt)}
+        )
 
     s_gmean = math.prod(si[0] for si in s.values()) ** (1 / len(s))
     s_gmean_err = sum((si[1] / si[0]) ** 2 for si in s.values()) ** 0.5 * s_gmean
