@@ -2,8 +2,8 @@
 paper/rossi_data/raw
 paper/rossi_data/L23
 
-# don't include some slurm log files that I have
-paper/model_fits/slurm
+# don't include slurm log files that I have
+slurm
 
 # temporary
 paper/model_fits/fits

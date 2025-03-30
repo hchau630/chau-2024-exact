@@ -1,5 +1,5 @@
-file_type = "png"
-dpi = 700
+# file_type = "png"
+# dpi = 700
 keep_dataframe_idx = false
 tag_names = ["loss"]
 

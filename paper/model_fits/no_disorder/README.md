@@ -4,10 +4,10 @@ Figure 6 subplots are organized differently than those of Figures 1-5. Below is 
 | Figure | Filename | Command (run in the current directory) |
 |--------|----------| -------------------------------------- |
 | 6A | `figures/dist_0-49/phase_diagram.pdf` | `INDICES=0-49 niarb plot plot/pairplot.toml -o figures/dist_0-49 --linfo --progress` |
-| 6B | `figures/dist_0-49/kappa_disynaptic.pdf` | `INDICES=0-49 niarb plot plot/pairplot.toml -o figures/dist_0-49 --linfo --progress` |
-| 6C | `figures/resp_space_0-49.pdf` | `INDICES=0-49 niarb plot plot/resp_space.toml -o figures --linfo --progress` |
-| 6D | `figures/resp_ori_0-49.pdf` | `INDICES=0-49 niarb plot plot/resp_ori.toml -o figures --linfo --progress` |
-| 6E | `figures/resp_space_ori_0-49.pdf` | `INDICES=0-49 niarb plot plot/resp_space_ori.toml -o figures --linfo --progress` |
+| 6B | `figures/dist_0-49/kappa_disynaptic.pdf` | Same as 6A |
+| 6C | `figures/resp_0-49/resp_space.pdf` | `INDICES=0-49 niarb plot plot/resp.toml -o figures/resp_0-49 --linfo --progress` |
+| 6D | `figures/resp_0-49/resp_ori.pdf` | Same as 6C |
+| 6E | `figures/resp_0-49/resp_space_ori.pdf` | Same as 6C |
 | 6F | `figures/compare_EI_space_0-49.pdf` | `INDICES=0-49 niarb plot plot/compare_EI_space.toml -o figures --linfo --progress` |
 | 6G | `figures/compare_gain_0.5_space_ct_0-49.pdf`, left subplot | `GAIN=0.5 INDICES=0-49 niarb plot plot/compare_gain_space_ct.toml -o figures --linfo --progress` |
 | 6H | `figures/compare_gain_0.5_ori_ct_0-49.pdf`, left subplot | `GAIN=0.5 INDICES=0-49 niarb plot plot/compare_gain_ori_ct.toml -o figures --linfo --progress` |
