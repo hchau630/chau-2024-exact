@@ -62,8 +62,8 @@ class Pipeline(NamedSequential):
         yerr: str = "dr_se",
         estimator: str = "mean",
     ):
-        if data is None == analysis is None:
-            raise ValueError("Exactly one of data or analysis must be provided.")
+        if data is not None and analysis is not None:
+            raise ValueError("`data` and `analysis` cannot both be provided.")
 
         if scaler is None:
             scaler = {}
