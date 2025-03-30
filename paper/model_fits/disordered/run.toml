@@ -6,37 +6,35 @@ __ref__ = ["fit.toml", "validation_pipeline", "model"]
 dense = false
 monotonic_strength = true
 keep_monotonic_norm = true
-monotonic_norm_ord = 2
+monotonic_norm_ord = 1.5
+simulation_kwargs = { options = { max_num_steps = 1000 }, dx_rtol = 5e-5 }
 
 [pipeline.model.prob_kernel.cell_type]
 __call__ = ["niarb.nn", "Matrix"]
 x_keys = ["cell_type"]
-# Campagnola et al. (2022):
-# - E -> E: pmax = 0.1
-# - E -> I: pmax = 0.225
-# - I -> E: pmax = 0.275
-# - I -> I: pmax = 0.3
+# Calculated based on Figure S1A of Campagnola et al. (2022) and inhibitory subtype
+# ratios based on Figure 1C of Billeh et al. (2020).
 matrix = [
-    [0.1, 0.275],
-    [0.225, 0.3],
+    [0.11, 0.331],
+    [0.578, 0.284],
 ]
 
 [pipeline.model.prob_kernel.space]
 __call__ = ["niarb.nn", "Laplace"]
 x_keys = ["space"]
-d = -1
+d = 0
 normalize = "origin"
 
 [pipeline.model.prob_kernel.space.sigma]
 __call__ = ["niarb.nn", "Matrix"]
 x_keys = ["cell_type"]
-# Fit to Rossi et al. (2020) with d = -1 kernel with max distance 300 μm:
-# - E -> E: sigma = 89.2 μm
-# - I -> E: sigma = 61.1 μm
+# Fit to Rossi et al. (2020) with d = 0 kernel with max distance 300 μm:
+# - E -> E: sigma = 110.6 μm
+# - I -> E: sigma = 73.1 μm
 # Assume E -> I same width as I -> E, I -> I same with as E -> E
 matrix = [
-    [89.2, 61.1],
-    [61.1, 89.2],
+    [110.6, 73.1],
+    [73.1, 110.6],
 ]
 
 [pipeline.model.prob_kernel.ori]
