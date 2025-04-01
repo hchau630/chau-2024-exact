@@ -2,6 +2,9 @@
 paper/rossi_data/raw
 paper/rossi_data/L23
 
+# don't include oldenburg data
+paper/oldenburg_data
+
 # don't include slurm log files that I have
 slurm
 

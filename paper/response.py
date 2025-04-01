@@ -101,12 +101,12 @@ def plot_ori_response(
         df["dr"] = df["dr"] / scale
 
         query = f"cell_type == '{cell_type}' and dh == 0"
-        if N_osi:
-            query += " and osi == 1"
         dfs[(category, "Simulation")] = df.query(query).reset_index(drop=True)
 
         df = response(W, sigma, kappa, (), 50, N_osi, dh, "analytical", **kwargs)
         df["dr"] = df["dr"] / math.prod(N_space) * (50 / N_ori)
+        if N_osi:
+            query += "and osi == 0.5"
         dfs[(category, "Theory")] = df.query(query).reset_index(drop=True)
 
     df = pd.concat(dfs, names=["category", "kind"]).reset_index([0, 1])
@@ -268,8 +268,6 @@ def plot_space_ori_response(
         df["dr"] = df["dr"] / scale
 
         query = f"cell_type == '{cell_type}' and dh == 0 and (dori == 0 or dori == 90)"
-        if N_osi:
-            query += " and osi == 1"
         dfs[(category, "Simulation")] = df.query(query).reset_index(drop=True)
 
         df = response(
@@ -328,9 +326,11 @@ def main():
     parser.add_argument("--N-ori", type=int, default=0)
     parser.add_argument("--N-osi", type=int, default=0)
     parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument("--dh", type=float, default=1.0)
     parser.add_argument("--tau-i", type=float, default=0.5)
     parser.add_argument("--rtol", type=float, default=1e-5)
     parser.add_argument("--maxiter", type=int, default=100)
+    parser.add_argument("--rlim", type=float, nargs=2, default=(30, 300))
     parser.add_argument("--mode", "-m", choices=["space", "ori", "space_ori"])
     parser.add_argument("--normalize", action="store_true")
     parser.add_argument("--out", "-o", type=str)
@@ -354,6 +354,7 @@ def main():
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             tau_i=args.tau_i,
             rtol=args.rtol,
@@ -365,11 +366,13 @@ def main():
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             normalize=args.normalize,
             tau_i=args.tau_i,
             rtol=args.rtol,
             maxiter=args.maxiter,
+            rlim=args.rlim,
         )
     else:
         fig = plot_space_ori_response(
@@ -378,11 +381,13 @@ def main():
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             normalize=args.normalize,
             tau_i=args.tau_i,
             rtol=args.rtol,
             maxiter=args.maxiter,
+            rlim=args.rlim,
         )
 
     if args.out:

@@ -7,22 +7,22 @@
 | 1D (right) | `python paper/lineplot.py compare -d 2 -s 125 90 85 110 --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-ori 12 --N-osi 7 --approx-order 3 -m ori_osi -o paper/figures/1d_b.pdf` |
 | 2A | `python paper/contourplot.py space_2 --rho 1 -o paper/figures/2a.pdf` |
 | 2B | `python paper/contourplot.py space_2 --rho 1 2 -o paper/figures/2b.pdf` |
-| 2C | `python paper/lineplot.py response --wee 4.5 1.5 1.5 --wei 3 3 2 --wie 2 2.5 2.5 --wii 0 4 4 -s 40 40 --axsize 1.25 1 -o paper/figures/2c.pdf` |
+| 2C | `python paper/response.py --wee 4.5 1.5 1.5 --wei 3 3 2 --wie 2 2.5 2.5 --wii 0 4 4 --N-space 100 100 -m space --N-ori 12 --N-osi 7 --normalize --dh 10000 --tau-i 0.25 --maxiter 1000 -o paper/figures/2c.pdf` |
 | 2D | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 --w00 5 --rho 0.72 -c E -l -1.25 1 -n 10 -N 100 -d 2 --shade 0.547 0.443 0.691 -o paper/figures/2d.pdf` |
 | 2E | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 -c E -l -1.25 1.25 -d 2 -N 100 --mode min_diff --w00 5 --rho 0.72 -n 9 -l 0 2 -s linear --shade 0.370 0.260 0.530 -o paper/figures/2e.pdf` |
 | 2F | `python paper/contourplot.py space_zero -m diff -x -5 5 -y 0 20 --w00 5 --rho 0.72 -c E -l -1.25 1.25 -l 0 1.5 -n 7 -d 2 -N 100 -o paper/figures/2f.pdf` |
 | 2G | `python paper/contourplot.py space_2 -m decay --rho 0.72 -o paper/figures/2g.pdf` |
 | 3A | `python paper/contourplot.py space_2 --rho 0.72 -c EI -y 0 20 -x -7.5 5 -o paper/figures/3a.pdf` |
 | 3B | `python paper/contourplot.py space_zero -d 2 -N 100 --w00 5 --rho 0.72 -m diff_EI -c E -x -7.5 5 -y 0 20 -l -0.5 1 -s halflog --linthresh 2 -n 7 --axsize 2.5 1.85 -o paper/figures/3b.pdf` |
-| 4A | `python paper/lineplot.py response -m ori --wee 0.5 0.5 --wei -0.5 -1 --wie 0.5 1 --wii 0 0 --no-normalize -o paper/figures/4a.pdf` |
+| 4A | `python paper/response.py --wee 1 --wei 4 --wie 4 --wii 0 --kee 0.5 0.5 --kei 0.25 0.5 --kie 0.25 0.5 --kii 0 0 --N-space 100 100 --N-ori 12 --N-osi 7 -m ori --dh 10000 -o paper/figures/4a.pdf` |
 | 4B | `python paper/contourplot.py mean --axes ori -x 0 2 -y -2 2 -N 500 -o paper/figures/4b.pdf` |
-| 4C | `python paper/lineplot.py response -d 2 -s 100 100 --wee 1.5 0.2 1.5 0.2 --wei -3 -1 -3 -1 --wie 3 0.9 3 0.45 --wii -5 -2.5 -5 -2.5 -m space_ori --axsize 1.25 1.4 -o paper/figures/4c.pdf` |
+| 4C | `python paper/response.py --wee 1.5 1.5 --wei 3 3 --wie 3 3 --wii 5 5 --kee 0.15 0.15 --kei 0.5 0.3 --kie 0.4 0.15 --kii 0.5 0.5 --N-space 100 100 --N-ori 12 --N-osi 7 -m space_ori --dh 10000 --normalize --rlim 35 300 -o paper/figures/4c.pdf` |
 | 4D | `python paper/contourplot.py space_ori -x -2 2 -y -2 2 --rho 0.72 --w00 0.2 -c E --axsize 2.25 2 -N 1000 -o paper/figures/4d_alt.pdf` |
-| 5A | `python paper/mean_response_gain.py -o paper/figures/5a.pdf` |
+| 5A | `paper/mean_response_gain.py 2 1 3 --N-space 100 100 --N-ori 12 --N-osi 7 --scale 10000 --rtol 5e-5 -o paper/figures/5a.pdf` |
 | 5B | Same as Figure 2B
 | 5C | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 --w00 5 -l -0.5 1 -n 7 -s neghalflog -m gain --rho 0.72 -c E -d 2 -N 100 --axsize 2.5 1.85 -o paper/figures/5c.pdf` |
 | 5D | Same as Figure 4B |
-| 6 | See `paper/model_fits/README.md` |
+| 6 | See `paper/model_fits/no_disorder/README.md` |
 | S1 (1st row) | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 --w00 1 --rho 0.8 1 1.25 -c E -l -4 1 -n 21 -N 100 -d 2 --shade 0.547 0.443 0.691 -o paper/figures/supp/S1_a.pdf` |
 | S1 (2nd row) | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 --w00 2.5 --rho 0.8 1 1.25 -c E -l -1.25 1 -n 10 -N 100 -d 2 --shade 0.547 0.443 0.691 -o paper/figures/supp/S1_b.pdf` |
 | S1 (3rd row) | `python paper/contourplot.py space_zero -x -5 5 -y 0 20 --w00 5 --rho 0.8 1 1.25 -c E -l -1.25 1 -n 10 -N 100 -d 2 --shade 0.547 0.443 0.691 -o paper/figures/supp/S1_c.pdf` |
@@ -38,6 +38,8 @@
 | S5 (1st row) | `python paper/contourplot.py space_zero -x -5 2.5 -y 0 5 --w00 1 -l -1 1 -s symlog -n 11 -m gain --rho 0.8 1 1.25 -c E -d 2 -N 100 --axsize 2.5 2 -o paper/figures/supp/S5_a.pdf` |
 | S5 (2nd row) | `python paper/contourplot.py space_zero -x -5 2.5 -y 0 5 --w00 2.5 -l -1 1 -s symlog -n 11 -m gain --rho 0.8 1 1.25 -c E -d 2 -N 100 --axsize 2.5 2 -o paper/figures/supp/S5_b.pdf` |
 | S5 (3rd row) | `python paper/contourplot.py space_zero -x -5 2.5 -y 0 5 --w00 5 -l -1 1 -s symlog -n 11 -m gain --rho 0.8 1 1.25 -c E -d 2 -N 100 --axsize 2.5 2 -o paper/figures/supp/S5_c.pdf` |
+| S6A | `python paper/fit_kernel.py paper/rossi_data/bootstrap/EE.csv paper/rossi_data/bootstrap/EI.csv -d 0 -M 300 -l G -x 0 500 5 --ylabel prob --y-intercept 0.1 0.275 -o paper/figures/supp/S6_a.pdf` |
+| S6B-H | See `paper/model_fits/disordered/README.md` |
 
 # Additional commands
 - To get the data files `paper/product_data/EI.csv` and `paper/product_data/IE.csv` used in the generation of Figure 1B, run\
@@ -72,3 +74,6 @@ Again, the values for the 95% confidence interval differs slightly from run to r
 
 - To get the best-fit value and uncertainty of $\kappa_\mathrm{EE} = 0.198 \pm 0.054$ used in constraining fitted model parameters in Figure 6, run\
 `python paper/fit_rossi_ori.py paper/rossi_data/fig2h.csv`
+
+- The values of pmax used in defining the connection probability in Figure S6 is computed with the command\
+`python paper/calc_pmax.py`
