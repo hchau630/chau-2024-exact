@@ -188,7 +188,7 @@ def resolvent(
         out = func(r).real  # (*BWxy, [2])
     else:
         eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n,)
-        out = W @ torch.linalg.inv(l * W + eye)  # (*BW, [2], n, n)
+        out = (eye - torch.linalg.inv(l * W + eye)) / l  # (*BW, [2], n, n)
         out = utils.take_along_dims(
             out, i[..., None, None], j[..., None, None]
         )  # (*BWxy, [2])
