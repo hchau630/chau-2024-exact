@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy import optimize
 
+from mpl_config import GREY, GRID_WIDTH, get_sizes, set_rcParams
+
 
 def func(x, a, kappa):
     return a * (1 + 2 * kappa * np.cos(x / 90 * np.pi))
@@ -13,6 +15,7 @@ def func(x, a, kappa):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", type=str)
+    parser.add_argument("--cov", action="store_true")
     parser.add_argument("--out", "-o", type=str)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
@@ -26,25 +29,35 @@ def main():
     print(info)
 
     if args.out or args.show:
-        samples = np.random.multivariate_normal(popt, pcov, 10000).T[..., None]
+        set_rcParams()
+        figsize, rect = get_sizes(1, 1, 1, 1)
+        fig = plt.figure(figsize=figsize)
+        ax = fig.add_axes(rect)
+        ax.plot(x, y, ls="--")
+        ax.fill_between(x, y - yerr, y + yerr, alpha=0.25)
+
         x_smooth = np.linspace(-180, 180, 100)
-        y_samples = func(x_smooth, *samples)  # (10000, N_x)
         ypred = func(x_smooth, *popt)
-        ypred_err = np.std(y_samples, axis=0, ddof=1)
-        # ypred_pi = np.percentile(y_samples, [2.5, 97.5], axis=0)
-        plt.plot(x, y)
-        plt.fill_between(x, y - yerr, y + yerr, alpha=0.5)
-        plt.plot(x_smooth, ypred)
-        plt.fill_between(
-            x_smooth, ypred - 2 * ypred_err, ypred + 2 * ypred_err, alpha=0.5
-        )
-        # plt.fill_between(x_smooth, *ypred_pi, alpha=0.5)
-        plt.xlabel("$\Delta$ pref. ori. (deg)")
-        plt.ylabel("Connection probability")
-        plt.tight_layout()
+        ax.plot(x_smooth, ypred, color=("C1" if args.cov else "C0"))
+
+        if args.cov:
+            samples = np.random.multivariate_normal(popt, pcov, 10000).T[..., None]
+            y_samples = func(x_smooth, *samples)  # (10000, N_x)
+            ypred_err = np.std(y_samples, axis=0, ddof=1)
+            # ypred_pi = np.percentile(y_samples, [2.5, 97.5], axis=0)
+            ax.fill_between(
+                x_smooth, ypred - 2 * ypred_err, ypred + 2 * ypred_err, alpha=0.5
+            )
+            # ax.fill_between(x_smooth, *ypred_pi, alpha=0.5)
+
+        ax.axhline(0, color=GREY, linewidth=GRID_WIDTH)
+        ax.set_xlabel("$\Delta$ dir. pref. (deg)")
+        ax.set_ylabel("Fraction")
+        ax.set_xticks([-180, 0, 180])
+        fig.tight_layout()
     if args.out:
         header = f"Command: `{' '.join(sys.argv)}`, {info}"
-        plt.savefig(args.out, bbox_inches="tight", metadata={"Subject": header})
+        fig.savefig(args.out, bbox_inches="tight", metadata={"Subject": header})
     if args.show:
         plt.show()
 
