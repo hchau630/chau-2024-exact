@@ -161,6 +161,7 @@ def resolvent(
 
     if "ori" in x:
         W = torch.stack([W, W * kappa], dim=-3)  # (*BW, 2, n, n)
+        sigma = sigma.unsqueeze(-3)  # (*BW, 1, n, n)
         i, j = i[..., None], j[..., None]  # (*Bx, 1), (*By, 1)
 
     if "osi" in x:
