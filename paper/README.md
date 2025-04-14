@@ -3,8 +3,9 @@
 | Figure | Command (run in the enclosing directory) |
 |--------|------------------------------------------|
 | 1B | `python paper/fit_kernel.py paper/product_data/EI.csv paper/product_data/IE.csv -o paper/figures/1b.pdf` |
-| 1D (left) | `python paper/lineplot.py compare -d 2 -s 125 90 85 110 --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-ori 12 --N-osi 7 --approx-order 3 -o paper/figures/1d_a.pdf` |
-| 1D (right) | `python paper/lineplot.py compare -d 2 -s 125 90 85 110 --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-ori 12 --N-osi 7 --approx-order 3 -m ori_osi -o paper/figures/1d_b.pdf` |
+| 1C | `python paper/response.py --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-space 100 100 --N-ori 12 --N-osi 7 -m eigvals --eps 1e-2 -o paper/figures/1c.pdf` |
+| 1D (left) | `python paper/response.py --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-space 100 100 --N-ori 12 --N-osi 7 -m compare -k space_ori --dh 10000 -o paper/figures/1d_a.pdf` |
+| 1D (right) | `python paper/response.py --wee 3 --wei 4 --wie 4 --wii 5.25 --kee 0.5 --kei -0.25 --kie -0.25 --kii 0.25 --N-space 100 100 --N-ori 12 --N-osi 7 -m compare -k ori_osi --dh 10000 --tau-i 1.0 -o paper/figures/1d_b.pdf` |
 | 2A | `python paper/contourplot_space.py E -o paper/figures/2a.pdf` |
 | 2B | `python paper/contourplot_space.py E --rho 1 2 -o paper/figures/2b.pdf` |
 | 2C | `python paper/response.py --wee 4.5 1.5 1.5 --wei 3 3 2 --wie 2 2.5 2.5 --wii 0 4 4 --N-space 100 100 -m space --N-ori 12 --N-osi 7 --normalize --dh 10000 --tau-i 0.25 --maxiter 1000 -o paper/figures/2c.pdf` |
