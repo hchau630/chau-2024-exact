@@ -83,7 +83,7 @@ def get_cbar_configs(spacing, levels, N_levels, linthresh):
             math.ceil(math.log10(levels[-1])) + 1,
             1,
         )
-        ticks = np.r_[-(10**halfticks), 0, 10**halfticks]
+        ticks = np.r_[-(10.0**halfticks), 0, 10.0**halfticks]
     elif spacing in {"log", "halflog"}:
         ticks = 10.0 ** np.arange(
             math.ceil(math.log10(levels[0])),

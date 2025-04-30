@@ -412,6 +412,8 @@ def plot_eigvals(
         **kwargs,
     )
     eigvals = torch.linalg.eigvals(W)
+    # Exclude very small eigenvalues since there are millions of such eigenvalues
+    # which makes Illustrator crash when importing the pdf of this figure
     eigvals = eigvals[eigvals.abs() > eps]
     radius = eigvals.abs().max().item()
 

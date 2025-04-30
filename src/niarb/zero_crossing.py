@@ -66,6 +66,7 @@ def find_root(
         r = r.real
 
     else:
+        # see the paper for an explanation of these bounds
         if d == 2:
             r1 = find_root(3, l0, l1, z, n=n)
             if n == 1:

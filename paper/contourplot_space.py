@@ -249,7 +249,8 @@ def plot_generic(x, y, z, levels, norm, ticks, clabel, shade, fig, ax):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "mode", choices={"E", "EI", "r0", "r1", "rmin", "rEI", "decay", "dr0dg"}
+        "mode",
+        choices={"E", "EI", "r0", "r1", "rmin", "rEI", "decay", "dr0dg", "dr1dw11"},
     )
     parser.add_argument("--numerical", "--num", dest="numerical", action="store_true")
     parser.add_argument("-x", type=float, nargs=2, default=(-5, 2.5))
@@ -334,17 +335,17 @@ def main():
 
         if args.mode == "r0":
             z = xrE1
-            clabel = r"$\frac{r_0}{\sqrt{\sigma_E \sigma_I}}$"
+            clabel = r"$\frac{s_0}{\sqrt{\sigma_E \sigma_I}}$"
         elif args.mode == "r1":
             z = xrE2 - xrE1
-            clabel = r"$\frac{r_1 - r_0}{\sqrt{\sigma_E \sigma_I}}$"
+            clabel = r"$\frac{s_1 - s_0}{\sqrt{\sigma_E \sigma_I}}$"
         elif args.mode == "rmin":
             z = xrEm - xrE1
-            clabel = r"$\frac{r^\mathrm{min}_0 - r_0}{\sqrt{\sigma_E \sigma_I}}$"
+            clabel = r"$\frac{s^\mathrm{min}_0 - s_0}{\sqrt{\sigma_E \sigma_I}}$"
         elif args.mode == "rEI":
             z = xrI1 - xrE1
             clabel = (
-                r"$\frac{r^\mathrm{I}_0 - r^\mathrm{E}_0}{\sqrt{\sigma_E \sigma_I}}$"
+                r"$\frac{s^\mathrm{I}_0 - s^\mathrm{E}_0}{\sqrt{\sigma_E \sigma_I}}$"
             )
         elif args.mode == "decay":
             if args.numerical:
@@ -367,7 +368,25 @@ def main():
                 gcE, _ = ratio_coef(args.d, gl0, gl1, rho0, gW[..., 1, 1])
                 gxrE1 = find_root(args.d, gl0, gl1, gcE)
             z = (gxrE1 - xrE1) / (xrE1 * args.dg)
-            clabel = r"$\frac{1}{r_0}\frac{dr_0}{dg}$"
+            clabel = r"$\frac{1}{s_0}\frac{ds_0}{dg}$"
+        elif args.mode == "dr1dw11":
+            W_ = W.copy()
+            W_[..., 1, 1] = W_[..., 1, 1] * (1 + args.dg)
+            if args.numerical:
+                dr_ = response(args.d, W_, sigma, r, args.tau_i, args.ori)[1]
+                xrE1_, xrE2_ = find_n_crossings(r, dr_[..., 0, :], n=2)
+                xrE1_, xrE2_ = xrE1_ / s, xrE2_ / s
+            else:
+                l0_, l1_ = eigvals2x2(W_, rho0)
+                cE_, _ = ratio_coef(args.d, l0_, l1_, rho0, W_[..., 1, 1])
+                xrE1_ = find_root(args.d, l0_, l1_, cE_)
+                xrE2_ = find_root(args.d, l0_, l1_, cE_, n=2)
+            z_ = xrE2_ - xrE1_
+            z = xrE2 - xrE1
+            z = (z_ - z) / (z * args.dg)
+            clabel = r"$\frac{1}{s_1 - s_0}\frac{d(s_1 - s_0)}{d|w_\mathrm{II}|}$"
+        else:
+            raise RuntimeError(f"Invalid mode `{args.mode}`.")
 
         plot_generic(x, y, z, levels, norm, ticks, clabel, args.shade, fig, ax)
 
