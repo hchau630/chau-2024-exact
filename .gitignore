@@ -2,7 +2,6 @@
 paper/rossi_data/raw
 paper/rossi_data/L23
 paper/oldenburg_data
-paper/znamenskiy_data/ori
 
 # don't include slurm log files that I have
 slurm

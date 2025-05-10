@@ -33,8 +33,9 @@
 | S5 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py dr0dg -y 0 15 --rho $RHO --w00 $WEE -l -1 1 -n 11 -s symlog -N 200 -o paper/figures/supp/S5/rho$RHO-wee$WEE.pdf; done; done` |
 | S6A-C | See `paper/model_fits/no_disorder/README.md` |
 | S7A | `python paper/fit_kernel.py paper/rossi_data/bootstrap/EE.csv paper/rossi_data/bootstrap/EI.csv -d 0 -M 300 -l G -x 0 500 5 --ylabel prob --y-intercept 0.1 0.275 -o paper/figures/supp/S7_a.pdf` |
-| S7B inset | `python paper/plot_znamenskiy.py paper/znamenskiy_data/EI.csv -o paper/figures/supp/S7_b.pdf` |
-| S7C inset | `python paper/fit_rossi_ori.py paper/rossi_data/fig2h.csv -o paper/figures/supp/S7_c.pdf` |
+| S7B inset | `python paper/fit_rossi_ori.py paper/rossi_data/fig2h.csv -o paper/figures/supp/S7_b.pdf` |
+| S7C inset | `python paper/plot_znamenskiy.py paper/znamenskiy_data/EI.csv -o paper/figures/supp/S7_c.pdf` |
+| S7D inset | `python paper/plot_znamenskiy.py paper/znamenskiy_data/ori/EI.csv --ori -o paper/figures/supp/S7_d.pdf` |
 | S7B-J | See `paper/model_fits/disordered/README.md` |
 
 # Additional commands

@@ -24,6 +24,7 @@ CRECT = (
 )
 GREY = "#666666"
 GRID_WIDTH = rcParams["grid.linewidth"]
+GRID_COLOR = rcParams["grid.color"]
 
 
 def get_sizes(leftscale=1.0, rightscale=1.0, topscale=1.0, bottomscale=1.0, cbar=False):
