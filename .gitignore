@@ -7,9 +7,12 @@ paper/oldenburg_data
 slurm
 
 # temporary
-paper/model_fits/fits
-paper/model_fits/runs
-paper/model_fits/figures
+paper/model_fits/disordered/fits
+paper/model_fits/disordered/runs
+paper/model_fits/disordered/figures
+paper/model_fits/no_disorder/fits
+paper/model_fits/no_disorder/runs
+paper/model_fits/no_disorders/figures
 
 # macOS
 .DS_Store

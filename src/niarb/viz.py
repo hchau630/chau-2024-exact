@@ -56,6 +56,7 @@ def figplot(
     legend_kwargs: dict | None = None,
     xscale: str = "linear",
     yscale: str = "linear",
+    refline: dict | None = None,
     **kwargs,
 ) -> FacetGrid:
     if mapping is None:
@@ -142,6 +143,9 @@ def figplot(
                     ax.axvline(0, color=color, linewidth=linewidth)
             if grid not in ["xzero", "yzero", "xyzero"]:
                 ax.grid(axis=grid)
+
+    if refline is not None:
+        g.refline(**refline)
 
     # format legend
     if g.legend:

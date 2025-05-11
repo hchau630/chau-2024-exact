@@ -14,6 +14,7 @@ Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Be
 | S6A | `figures/dist_0-49/gW_dist.pdf` | Same as 6A |
 | S6B | `figures/dist_0-49/sigma_dist.pdf` | Same as 6A |
 | S6C | `figures/dist_0-49/kappa_dist.pdf` | Same as 6A |
+| S6D | `figures/spectral_radius_0-49.pdf` | `INDICES=0-49 niarb plot plot/weights_eigvals.toml -o figures --linfo --progress` |
 
 The generated figures depend on the data files in `data`, the fitted model parameter files in `fits` and the fitted model perturbation response files in `runs`.
 
