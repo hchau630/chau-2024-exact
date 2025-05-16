@@ -90,7 +90,6 @@ def dataframe(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
-    columns: Sequence[str] | None = None,
     **kwargs,
 ) -> DataFrame:
     if isinstance(func, Sequence):
@@ -110,9 +109,7 @@ def dataframe(
         for k, v in tags.items():
             df[k] = pd.Categorical.from_codes([0] * len(df), categories=(v,))
 
-    df = process_dataframe(
-        df, evals=evals, query=query, cuts=cuts, rolling=rolling, columns=columns
-    )
+    df = process_dataframe(df, evals=evals, query=query, cuts=cuts, rolling=rolling)
 
     return df
 
@@ -124,15 +121,12 @@ def plot(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
-    columns: Sequence[str] | None = None,
     groupby: str | Sequence[str] | None = None,
     progress: bool = False,
     leave: bool = True,
     **kwargs,
 ) -> dict[str, FacetGrid]:
-    df = process_dataframe(
-        df, evals=evals, query=query, cuts=cuts, rolling=rolling, columns=columns
-    )
+    df = process_dataframe(df, evals=evals, query=query, cuts=cuts, rolling=rolling)
 
     figs = {}
     if groupby:
@@ -155,7 +149,6 @@ def process_dataframe(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float] | tuple[str, Sequence[int | float], int | float]] | None = None,
-    columns: Sequence[str] | None = None,
 ) -> DataFrame:
     if query:
         df = df.query(query)
@@ -185,9 +178,6 @@ def process_dataframe(
                 df = pd.concat([sf, df.query(f"~({v[0]})")], ignore_index=True)
             else:
                 df = utils.rolling(df, k, *v)
-
-    if columns:
-        df = df[columns]
 
     return df
 

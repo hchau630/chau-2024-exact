@@ -1,0 +1,55 @@
+keep_dataframe_idx = false
+tag_names = ["loss"]
+
+[dataframes]
+__ignore__ = ["path"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights_ori", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_dataframe"]
+filename = { __eval__ = "path" }
+evals = { W = "W.abs()" }
+
+[plots]
+__ignore__ = ["plot_type"]
+
+[plots.__matrix__]
+plot_type = ["probability", "product"]
+
+[[plots.__include__]]
+func = "relplot"
+kind = "line"
+x = "rel_ori"
+hue = "presynaptic_cell_type"
+hue_order = ["PYR", "PV"]
+col = "postsynaptic_cell_type"
+col_order = ["PYR", "PV"]
+grid = "yzero"
+height = 1.75
+color = "black"
+legend_loc = "upper right"
+legend_title = false
+facet_kws = { sharey = false, legend_out = false }
+errorbar = "sd"
+err_kws = { linewidth = 0.5 }
+
+[plots.__include__.mapping]
+W = "Strength x prob."
+probability = "Connection prob."
+rel_ori = '$\Delta$ ori. pref. (deg)'
+postsynaptic_cell_type = "Postsynaptic"
+presynaptic_cell_type = "Presynaptic"
+
+[[plots.__include__]]
+plot_type = "probability"
+name = { __format__ = "connection_probability_ori_{INDICES}" }
+y = "probability"
+
+[[plots.__include__]]
+plot_type = "product"
+name = { __format__ = "connection_product_ori_{INDICES}" }
+y = "W"
+

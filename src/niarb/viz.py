@@ -133,13 +133,9 @@ def figplot(
         color, linewidth = rcParams["grid.color"], rcParams["grid.linewidth"]
         for ax in g.axes.flat:
             if grid in ["yzero", "xyzero"]:
-                ymin, ymax = ax.get_ylim()
-                if ymin < 0 < ymax:  # only add line if 0 is within the limits
-                    ax.axhline(0, color=color, linewidth=linewidth)
+                ax.axhline(0, color=color, linewidth=linewidth)
             if grid in ["xzero", "xyzero"]:
-                xmin, xmax = ax.get_xlim()
-                if xmin < 0 < xmax:  # only add line if 0 is within the limits
-                    ax.axvline(0, color=color, linewidth=linewidth)
+                ax.axvline(0, color=color, linewidth=linewidth)
             if grid not in ["xzero", "yzero", "xyzero"]:
                 ax.grid(axis=grid)
 
@@ -167,7 +163,7 @@ def relplot(data=None, *, x=None, y=None, **kwargs):
     # for some reason seaborn is very memory-inefficient, so manually do groupby
     # if errorbar is "se", "sd", or None. This is important for plotting large
     # dataframes such as when plotting weights.
-    if "errorbar" in kwargs and kwargs["errorbar"] in {"se", "sd", None}:
+    if "errorbar" in kwargs and any(kwargs["errorbar"] == k for k in {"se", "sd", None}):
         errorbar = kwargs["errorbar"]
         by = [x] + [
             v

@@ -20,18 +20,30 @@ template = '{variable}[{Postsynaptic},{Presynaptic}]'
 '$\tilde{w}_\mathrm{EI}\tilde{w}_\mathrm{IE} - \tilde{w}_\mathrm{EE}\tilde{w}_\mathrm{II}$' = '''
 `gW[PYR,PV]` * `gW[PV,PYR]` * `kappa[PYR,PV]` * `kappa[PV,PYR]` - `gW[PYR,PYR]` * `gW[PV,PV]` * `kappa[PYR,PYR]` * `kappa[PV,PV]`'''
 '$\tilde{w}_\mathrm{EE}$' = '`gW[PYR,PYR]` * `kappa[PYR,PYR]`'
+'$\sigma_\mathrm{EE}$' = '`sigma[PYR,PYR]`'
+'$\sigma_\mathrm{EI}$' = '`sigma[PYR,PV]`'
+'$\sigma_\mathrm{IE}$' = '`sigma[PV,PYR]`'
+'$\sigma_\mathrm{II}$' = '`sigma[PV,PV]`'
 
 [dataframes.__include__.df]
 __call__ = ["niarb.dataframe", "from_state_dict"]
 dims = { gW = ["Postsynaptic", "Presynaptic"], sigma = ["Postsynaptic", "Presynaptic"], kappa = ["Postsynaptic", "Presynaptic"] }
 coords = { gW = [["PYR", "PV"], ["PYR", "PV"]], sigma = [["PYR", "PV"], ["PYR", "PV"]], kappa = [["PYR", "PV"], ["PYR", "PV"]] }
-state_dict = { __call__ = ["torch", "load"], f = { __eval__ = "path" }, map_location = "cpu" }
+state_dict = { __call__ = ["torch", "load"], f = { __eval__ = "path" }, map_location = "cpu", weights_only = true }
 
 [[plots]]
 name = "pairplot"
 func = "pairplot"
 # kind = "reg"
 vars = ['$\mathrm{det}(\mathbf{W})$', '$w_\mathrm{EE} - |w_\mathrm{II}|$', '$|w_\mathrm{II}|$', '$w_\mathrm{EE}$']
+height = 2
+diag_kws = { element = "step", fill = false }
+
+[[plots]]
+name = "pairplot_sigma"
+func = "pairplot"
+# kind = "reg"
+vars = ['$\sigma_\mathrm{EE}$', '$\sigma_\mathrm{EI}$', '$\sigma_\mathrm{IE}$', '$\sigma_\mathrm{II}$']
 height = 2
 diag_kws = { element = "step", fill = false }
 
