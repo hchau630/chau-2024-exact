@@ -352,6 +352,7 @@ class V1(torch.nn.Module):
         osi_func: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
         osi_prob: torch.distributions.Distribution | Sequence = ("Uniform", 0.0, 1.0),
         f: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
+        space_x: tuple[float, float] = (1.0, torch.inf),
         kappa_x: float = 0.0,
         sigma_symmetry: str | Sequence[Sequence[int]] | Tensor | None = None,
         null_connections: Iterable[Sequence[CellType]] | None = None,
@@ -406,7 +407,10 @@ class V1(torch.nn.Module):
                 and the rest are the distribution parameters. batch_shape must be either () or (n,).
                 Ignored if "osi" not in variables.
             f (optional): Model nonlinearity. If None, model is linear.
-            kappa_x (optional): Multiply connectivitiy 1 + 2 * kappa_x * cos(x["ori"])
+            space_x (optional): Multiply connectivity by nn.SpaceGain(*space_x, "space").
+                Note that the response cannot be computed when mode == "analytical" and
+                space_x is not default.
+            kappa_x (optional): Multiply connectivity by 1 + 2 * kappa_x * cos(x["ori"]).
             sigma_symmetry (optional): Symmetries in sigma. If a string, must be one of
                 {"pre", "post", "full"}. If tensor-like, must have shape (n, n)
                 consisting of consecutive integers starting from 0. If None, no symmetry
@@ -619,7 +623,8 @@ class V1(torch.nn.Module):
         self._osi_func = osi_func
         self.osi_prob = osi_prob
         self.f = f
-        self.kappa_x = kappa_x
+        self.space_x_ = space_x
+        self.kappa_x_ = kappa_x
         self.autapse = autapse
         self.mode = mode
         self.approx_order = approx_order
@@ -734,9 +739,12 @@ class V1(torch.nn.Module):
                 nn.Matrix(self.W, "cell_type") if has_ct else nn.Scalar(self.W)
             ),
             "space": space_product_kernel,
-            "ori": nn.Tuning(kappa_kernel, "ori", normalize=True)
-            * nn.Tuning(nn.Scalar(self.kappa_x_), "ori", mode="x"),
+            "ori": nn.Tuning(kappa_kernel, "ori", normalize=True),
         }
+        if self.space_x != (1.0, torch.inf):
+            product_kernel["space"] *= nn.SpaceGain(*self.space_x, "space")
+        if self.kappa_x != 0.0:
+            product_kernel["ori"] *= nn.Tuning(nn.Scalar(self.kappa_x), "ori", mode="x")
         strength_kernel = {
             "cell_type": product_kernel["cell_type"] / prob_kernel.get("cell_type", 1),
             "space": space_strength_kernel,
@@ -817,8 +825,13 @@ class V1(torch.nn.Module):
     def kappa_(self) -> Tensor:
         return self.kappa
 
-    def kappa_x_(self) -> Tensor:
-        return torch.tensor(self.kappa_x)
+    @property
+    def space_x(self) -> tuple[float, float]:
+        return self.space_x_
+
+    @property
+    def kappa_x(self) -> float:
+        return self.kappa_x_
 
     def W(self, with_gain: bool = False, **kwargs) -> Tensor:
         W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
@@ -982,6 +995,16 @@ class V1(torch.nn.Module):
             is instead a Tensor of connectivity weights.
 
         """
+        if (
+            output == "response"
+            and self.mode == "analytical"
+            and self.space_x != (1.0, torch.inf)
+        ):
+            raise ValueError(
+                "space_x cannot be specified when output == 'response' and mode == "
+                f"'analytical', but {self.space_x=}."
+            )
+
         if isinstance(to_dataframe, str) and to_dataframe not in {"tdfl", "pandas"}:
             raise ValueError(
                 "to_dataframe must be either 'tdfl', 'pandas', or bool, but got "
@@ -1011,7 +1034,11 @@ class V1(torch.nn.Module):
             keys += ["space_dV"]
 
         if check_circulant:
-            affine_vars = {"space", "ori"} if self.kappa_x == 0 else {"space"}
+            affine_vars = set()
+            if self.space_x == (1.0, torch.inf):
+                affine_vars.add("space")
+            if self.kappa_x == 0.0:
+                affine_vars.add("ori")
             cdim = _cdim(
                 x.data[self.variables], ndim, affine_vars, rtol=1.0e-2, atol=1.0e-8
             )

@@ -169,7 +169,7 @@ class TestV1:
 
     @pytest.mark.parametrize("d", [1, 2, 3])
     @pytest.mark.parametrize(
-        "variables, osi_func, osi_prob, sigma_symmetry, kappa_x",
+        "variables, osi_func, osi_prob, sigma_symmetry, space_x, kappa_x",
         get_parameters(
             variables=[
                 ["cell_type"],
@@ -189,10 +189,13 @@ class TestV1:
                 ("Beta", [2.0, 1.5], [3.0, 2.5]),
             ],
             sigma_symmetry=[[[0, 1], [1, 0]], "pre", "post", "full", None],
+            space_x=[(1.0, torch.inf), (0.5, 175.0)],
             kappa_x=[0.0, 0.5],
         ),
     )
-    def test_weights(self, variables, d, osi_func, osi_prob, sigma_symmetry, kappa_x):
+    def test_weights(
+        self, variables, d, osi_func, osi_prob, sigma_symmetry, space_x, kappa_x
+    ):
         model = nn.V1(
             variables,
             cell_types=(CellType.PYR, CellType.PV),
@@ -203,6 +206,7 @@ class TestV1:
                 if "cell_type" in variables
                 else nn.SSN(2)
             ),
+            space_x=space_x,
             kappa_x=kappa_x,
             sigma_symmetry=sigma_symmetry,
         )
@@ -258,12 +262,15 @@ class TestV1:
             )
             if d > 1:
                 expected[r == 0] = 0.0
+            r = x["space"][:, None].norm(dim=-1)  # (M, 1)
+            b, s = space_x
+            expected = expected * (b + (1 - b) * torch.exp(-(r**2) / (2 * s**2)))
 
         if "ori" in variables:
             theta = functional.diff(x["ori"][:, None], x["ori"][None, :])
             theta = theta.tensor.squeeze(-1) / 90.0 * torch.pi  # (M, M)
             expected = expected * (1 + 2 * kappa * torch.cos(theta)) / N_ori
-            x_theta = x["ori"][:, None].norm(dim=-1) / 90.0 * torch.pi
+            x_theta = x["ori"][:, None].norm(dim=-1) / 90.0 * torch.pi  # (M, 1)
             expected = expected * (1 + 2 * kappa_x * torch.cos(x_theta))
 
         if "osi" in variables:
@@ -584,7 +591,7 @@ class TestV1:
         if "cell_type" in variables:
             dh = dh.unsqueeze(1)  # (N_ori, 1, N_ori)
             dh = torch.cat([dh, torch.zeros_like(dh)], dim=1)  # (N_ori, 2, N_ori)
-        x["dh"] = dh  # (1, [2,] N_ori)
+        x["dh"] = dh  # (N_ori, [2,] N_ori)
         x["rel_ori"] = x.apply(
             perturbation.abs_relative_ori, dim=range(1, x.ndim), keepdim=True
         )

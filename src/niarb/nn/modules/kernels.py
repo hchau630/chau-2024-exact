@@ -24,6 +24,7 @@ __all__ = [
     "Monotonic",
     "Piecewise",
     "Tuning",
+    "SpaceGain",
     "RankOne",
     "Norm",
     "Radial",
@@ -432,6 +433,18 @@ class Tuning(Kernel):
         if self.normalize:
             out = out / theta.period
         return out
+
+
+class SpaceGain(Kernel):
+    n = 1
+
+    def __init__(self, baseline: float, sigma: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.b = baseline
+        self.s = sigma
+
+    def kernel(self, x: Tensor, _: Tensor) -> Tensor:
+        return self.b + (1 - self.b) * torch.exp(-(x.norm(dim=-1)**2) / (2 * self.s**2))
 
 
 class RankOne(Kernel):
