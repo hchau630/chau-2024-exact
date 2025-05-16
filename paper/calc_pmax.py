@@ -13,15 +13,15 @@ def main():
             [0.38, 0.0, 0.92, 0.05],
         ]
     )
-    print(L23_pmax.T)
+    # print(L23_pmax.T)
 
     prob = np.array([640, 464, 1107])
     prob = prob / prob.sum()
     prob_sq = prob[:, None] * prob[None, :]
     np.testing.assert_allclose(prob.sum(), 1.0)
     np.testing.assert_allclose(prob_sq.sum(), 1.0)
-    print(prob)
-    print(prob_sq)
+    # print(prob)
+    # print(prob_sq)
 
     EE = L23_pmax[0, 0]
     EI = (L23_pmax[0, 1:] * prob).sum()
@@ -33,7 +33,7 @@ def main():
             [IE, II],
         ]
     )
-    print(L23_pmax)
+    print(f"L2/3 pmax =\n{L23_pmax}")
 
 
 if __name__ == "__main__":

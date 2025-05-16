@@ -10,12 +10,27 @@ import seaborn as sns
 
 from niarb import viz, nn, neurons
 from niarb.nn.modules.v1 import compute_osi_scale
-from mpl_config import set_rcParams, get_sizes
+from mpl_config import set_rcParams, get_sizes, GREY, GRID_WIDTH
 
 
-def response(
-    W, sigma, kappa, N_space, N_ori, N_osi, dh, mode, tau_i=0.5, rtol=1e-5, maxiter=100
+def forward(
+    W,
+    sigma,
+    kappa,
+    N_space,
+    N_ori,
+    N_osi,
+    dh,
+    mode,
+    tau_i=0.5,
+    rtol=1e-5,
+    maxiter=100,
+    output="response",
+    **kwargs,
 ):
+    if output not in {"response", "weight"}:
+        raise ValueError(f"output must be 'response' or 'weight', but {output=}.")
+
     if any(Ni % 2 != 0 for Ni in N_space):
         raise ValueError("N_space must be even.")
     if N_ori % 2 != 0:
@@ -58,6 +73,7 @@ def response(
         tau=[1.0, tau_i],
         mode=mode,
         simulation_kwargs={"dx_rtol": rtol, "options": {"max_num_steps": maxiter}},
+        **kwargs,
     )
 
     model.double()
@@ -70,7 +86,10 @@ def response(
         if (abscissa := model.spectral_summary(kind="J").abscissa) >= 0:
             raise ValueError(f"The model is unstable: {abscissa=}")
         print(model.spectral_summary(kind="J"))
-        return model(x, ndim=x.ndim, to_dataframe="pandas")
+
+        if output == "weight":
+            return model(x, ndim=x.ndim, output=output, to_dataframe=False)
+        return model(x, ndim=x.ndim, output=output, to_dataframe="pandas")
 
 
 def plot_ori_response(
@@ -95,18 +114,18 @@ def plot_ori_response(
             category = "Same-favoring"
         print(category)
 
-        df = response(
+        df = forward(
             W, sigma, kappa, N_space, N_ori, N_osi, dh * scale, "numerical", **kwargs
         )
         df["dr"] = df["dr"] / scale
 
         query = f"cell_type == '{cell_type}' and dh == 0"
-        if N_osi:
-            query += " and osi == 1"
         dfs[(category, "Simulation")] = df.query(query).reset_index(drop=True)
 
-        df = response(W, sigma, kappa, (), 50, N_osi, dh, "analytical", **kwargs)
+        df = forward(W, sigma, kappa, (), 50, N_osi, dh, "analytical", **kwargs)
         df["dr"] = df["dr"] / math.prod(N_space) * (50 / N_ori)
+        if N_osi:
+            query += "and osi == 0.5"
         dfs[(category, "Theory")] = df.query(query).reset_index(drop=True)
 
     df = pd.concat(dfs, names=["category", "kind"]).reset_index([0, 1])
@@ -177,7 +196,7 @@ def plot_space_response(
             category = "0"
         print(tr, det, category)
 
-        df = response(
+        df = forward(
             W, sigma, kappa, N_space, N_ori, N_osi, dh * scale, "numerical", **kwargs
         )
         df["dr"] = df["dr"] / scale
@@ -185,7 +204,7 @@ def plot_space_response(
         query = f"cell_type == '{cell_type}' and dh == 0"
         dfs[(category, "Simulation")] = df.query(query).reset_index(drop=True)
 
-        df = response(W, sigma, kappa, N_space, 0, 0, dh, "analytical", **kwargs)
+        df = forward(W, sigma, kappa, N_space, 0, 0, dh, "analytical", **kwargs)
         df["dr"] = df["dr"] / ((N_ori or 1) * (N_osi or 1))
         dfs[(category, "Theory")] = df.query(query).reset_index(drop=True)
 
@@ -262,19 +281,15 @@ def plot_space_ori_response(
             category = "0"
         print(tr, det, category)
 
-        df = response(
+        df = forward(
             W, sigma, kappa, N_space, N_ori, N_osi, dh * scale, "numerical", **kwargs
         )
         df["dr"] = df["dr"] / scale
 
         query = f"cell_type == '{cell_type}' and dh == 0 and (dori == 0 or dori == 90)"
-        if N_osi:
-            query += " and osi == 1"
         dfs[(category, "Simulation")] = df.query(query).reset_index(drop=True)
 
-        df = response(
-            W, sigma, kappa, N_space, N_ori, N_osi, dh, "analytical", **kwargs
-        )
+        df = forward(W, sigma, kappa, N_space, N_ori, N_osi, dh, "analytical", **kwargs)
         dfs[(category, "Theory")] = df.query(query).reset_index(drop=True)
 
     df = pd.concat(dfs, names=["category", "kind"]).reset_index([0, 1])
@@ -314,8 +329,120 @@ def plot_space_ori_response(
     return g.figure
 
 
+def plot_response_comparison(
+    kind,
+    W,
+    kappa,
+    sigma=(125, 90, 85, 110),
+    N_space=(),
+    N_ori=0,
+    N_osi=0,
+    dh=1.0,
+    rlim=(30, 300),
+    cell_type="PYR",
+    **kwargs,
+):
+    if kind not in {"space_ori", "ori_osi"}:
+        raise ValueError(f"kind must be 'space_ori' or 'ori_osi', but {kind=}.")
+
+    df = {}
+    df["Theory"] = forward(
+        W, sigma, kappa, N_space, N_ori, N_osi, dh, "analytical", **kwargs
+    )
+    df["Numerics"] = forward(
+        W, sigma, kappa, N_space, N_ori, N_osi, dh, "numerical", **kwargs
+    )
+    df["Approx"] = forward(
+        W, sigma, kappa, N_space, N_ori, N_osi, dh, "matrix_approx", **kwargs
+    )
+    df = pd.concat(df, names=["Method"]).reset_index(0)
+    df = df.query(f"cell_type == '{cell_type}' and dh == 0")
+    df = df.query(f"distance >= {rlim[0]} and distance < {rlim[1]}")
+
+    mapping = {
+        "distance": "Distance (μm)",
+        "dr": "Response (a.u.)",
+        "dori": "Δ Tuning pref. (°)",
+        "osi": "Selectivity",
+    }
+    lineplot = viz.mapped(sns.lineplot, mapping)
+
+    figsize, rect = get_sizes(1, 2, 1, 1)
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes(rect)
+
+    if kind == "space_ori":
+        df = df.query("dori == 0  or dori == 45 or dori == 90")
+
+        lineplot(
+            df, x="distance", y="dr", hue="dori", style="Method", errorbar=None, ax=ax
+        )
+    else:
+        df = df.query("osi == 0 or osi == 0.5 or osi == 1")
+
+        lineplot(df, x="dori", y="dr", hue="osi", style="Method", errorbar=None, ax=ax)
+        ax.set_xticks([0, 45, 90])
+
+    sns.move_legend(ax, "upper left", bbox_to_anchor=(1.1, 1))
+    ax.axhline(0, color="grey", ls="--")
+
+    return fig
+
+
+def plot_eigvals(
+    W,
+    kappa,
+    sigma=(125, 90, 85, 110),
+    N_space=(),
+    N_ori=0,
+    N_osi=0,
+    eps=1e-5,
+    **kwargs,
+):
+    W = forward(
+        W,
+        sigma,
+        kappa,
+        N_space,
+        N_ori,
+        N_osi,
+        1.0,
+        "numerical",
+        output="weight",
+        **kwargs,
+    )
+    eigvals = torch.linalg.eigvals(W)
+    # Exclude very small eigenvalues since there are millions of such eigenvalues
+    # which makes Illustrator crash when importing the pdf of this figure
+    eigvals = eigvals[eigvals.abs() > eps]
+    radius = eigvals.abs().max().item()
+
+    figsize, rect = get_sizes(1, 1, 1, 1, cbar=True)
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_axes(rect)
+
+    x = np.linspace(-1, 1, 1000)
+    ax.plot(x, np.sqrt(1 - x**2), color=GREY, linewidth=GRID_WIDTH)
+    ax.plot(x, -np.sqrt(1 - x**2), color=GREY, linewidth=GRID_WIDTH)
+    ax.axvline(1.0, color=GREY, linewidth=GRID_WIDTH, ls="--")
+    ax.scatter(eigvals.real, eigvals.imag, s=1, color="black")
+    ax.set_xlabel("$\mathrm{Re}(\lambda)$")
+    ax.set_ylabel("$\mathrm{Im}(\lambda)$")
+    ax.set_xlim(-2.25, 1.75)
+    ax.set_xticks([-2, -1, 0, 1])
+    ax.set_yticks([-1, 0, 1])
+    ax.set_aspect("equal")
+    ax.set_title(r"$\mathrm{max}_i |\lambda_i| = %.1f$" % radius)
+
+    return fig
+
+
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--mode", "-m", choices=["space", "ori", "space_ori", "compare", "eigvals"]
+    )
+    parser.add_argument("--kind", "-k", choices=["space_ori", "ori_osi"])
     parser.add_argument("--wee", type=float, nargs="+")
     parser.add_argument("--wei", type=float, nargs="+")
     parser.add_argument("--wie", type=float, nargs="+")
@@ -328,11 +455,15 @@ def main():
     parser.add_argument("--N-ori", type=int, default=0)
     parser.add_argument("--N-osi", type=int, default=0)
     parser.add_argument("--scale", type=float, default=1.0)
+    parser.add_argument("--dh", type=float, default=1.0)
     parser.add_argument("--tau-i", type=float, default=0.5)
     parser.add_argument("--rtol", type=float, default=1e-5)
     parser.add_argument("--maxiter", type=int, default=100)
-    parser.add_argument("--mode", "-m", choices=["space", "ori", "space_ori"])
+    parser.add_argument("--approx-order", type=int, default=3)
+    parser.add_argument("--eps", type=float, default=1e-5)
+    parser.add_argument("--rlim", type=float, nargs=2, default=(30, 300))
     parser.add_argument("--normalize", action="store_true")
+    parser.add_argument("--dpi", type=int)
     parser.add_argument("--out", "-o", type=str)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
@@ -354,6 +485,7 @@ def main():
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             tau_i=args.tau_i,
             rtol=args.rtol,
@@ -365,29 +497,63 @@ def main():
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             normalize=args.normalize,
             tau_i=args.tau_i,
             rtol=args.rtol,
             maxiter=args.maxiter,
+            rlim=args.rlim,
         )
-    else:
+    elif args.mode == "space_ori":
         fig = plot_space_ori_response(
             Ws,
             kappas,
             N_space=args.N_space,
             N_ori=args.N_ori,
             N_osi=args.N_osi,
+            dh=args.dh,
             scale=args.scale,
             normalize=args.normalize,
             tau_i=args.tau_i,
             rtol=args.rtol,
             maxiter=args.maxiter,
+            rlim=args.rlim,
+        )
+    elif args.mode == "compare":
+        fig = plot_response_comparison(
+            args.kind,
+            Ws[0],
+            kappas[0],
+            N_space=args.N_space,
+            N_ori=args.N_ori,
+            N_osi=args.N_osi,
+            dh=args.dh,
+            tau_i=args.tau_i,
+            rtol=args.rtol,
+            maxiter=args.maxiter,
+            rlim=args.rlim,
+            approx_order=args.approx_order,
+        )
+    else:
+        fig = plot_eigvals(
+            Ws[0],
+            kappas[0],
+            N_space=args.N_space,
+            N_ori=args.N_ori,
+            N_osi=args.N_osi,
+            tau_i=args.tau_i,
+            eps=args.eps,
         )
 
     if args.out:
+        if args.dpi is None:
+            args.dpi = "figure"
         fig.savefig(
-            args.out, bbox_inches="tight", metadata={"Subject": " ".join(sys.argv)}
+            args.out,
+            dpi=args.dpi,
+            bbox_inches="tight",
+            metadata={"Subject": " ".join(sys.argv)},
         )
     if args.show:
         plt.show()

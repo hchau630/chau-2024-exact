@@ -110,6 +110,7 @@ def resolvent(
     kappa: Tensor | float,
     osi_func: Callable[[Tensor], Tensor],
     osi_scale: Tensor | float,
+    kappa_x: float = 0.0,
     autapse: bool = False,
     order: int = 1,
     mode: str = "parallel",
@@ -132,6 +133,8 @@ def resolvent(
         osi_scale:
             Expectation of osi_func ** 2 over some distribution of OSI. If a tensor, shape must be
             broadcastable to (n,).
+        kappa_x (optional): Connectivity is multiplied by 1 + 2 * kappa_x * cos(x["ori"]).
+            Only implemented for the case where x and y do not contain "space" or "osi".
         order (optional): Optional argument passed to functional.wrapped.
         mode (optional): {'parallel', 'sequential'}. Optional argument passed to functional.wrapped.
 
@@ -147,6 +150,9 @@ def resolvent(
     if "osi" in x and "ori" not in x:
         raise ValueError("If 'osi' is present in x, 'ori' must also be present.")
 
+    if kappa_x != 0.0 and ("space" in x or "osi" in x or "ori" not in x or l != -1):
+        raise NotImplementedError("kappa_x is not implemented for this case.")
+
     batch_shape = W.shape[:-2]
 
     if isinstance(osi_scale, float):
@@ -161,6 +167,7 @@ def resolvent(
 
     if "ori" in x:
         W = torch.stack([W, W * kappa], dim=-3)  # (*BW, 2, n, n)
+        sigma = sigma.unsqueeze(-3)  # (*BW, 1, n, n)
         i, j = i[..., None], j[..., None]  # (*Bx, 1), (*By, 1)
 
     if "osi" in x:
@@ -187,8 +194,17 @@ def resolvent(
         func = functional.wrapped(func, order=order, mode=mode)
         out = func(r).real  # (*BWxy, [2])
     else:
-        eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n,)
-        out = W @ torch.linalg.inv(l * W + eye)  # (*BW, [2], n, n)
+        eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n, n)
+        if kappa_x == 0.0:
+            out = (eye - torch.linalg.inv(l * W + eye)) / l  # (*BW, [2], n, n)
+        else:
+            # l = -1, W has shape (*BW, 2, n, n)
+            out = torch.linalg.inv(eye - W)  # (*BW, 2, n, n)
+            Q = 2 * kappa_x**2 * (out[..., 1, :, :] - eye)
+            out[0] = torch.linalg.inv(eye - (eye + Q) @ W[..., 0, :, :])
+            T = 0.5 * W[..., 0, :, :] @ out[0] @ Q
+            out[1] = out[1] @ (eye + T)
+            out = out - eye
         out = utils.take_along_dims(
             out, i[..., None, None], j[..., None, None]
         )  # (*BWxy, [2])
@@ -336,6 +352,8 @@ class V1(torch.nn.Module):
         osi_func: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
         osi_prob: torch.distributions.Distribution | Sequence = ("Uniform", 0.0, 1.0),
         f: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
+        space_x: tuple[float, float] = (1.0, torch.inf),
+        kappa_x: float = 0.0,
         sigma_symmetry: str | Sequence[Sequence[int]] | Tensor | None = None,
         null_connections: Iterable[Sequence[CellType]] | None = None,
         autapse: bool = False,
@@ -389,6 +407,10 @@ class V1(torch.nn.Module):
                 and the rest are the distribution parameters. batch_shape must be either () or (n,).
                 Ignored if "osi" not in variables.
             f (optional): Model nonlinearity. If None, model is linear.
+            space_x (optional): Multiply connectivity by nn.SpaceGain(*space_x, "space").
+                Note that the response cannot be computed when mode == "analytical" and
+                space_x is not default.
+            kappa_x (optional): Multiply connectivity by 1 + 2 * kappa_x * cos(x["ori"]).
             sigma_symmetry (optional): Symmetries in sigma. If a string, must be one of
                 {"pre", "post", "full"}. If tensor-like, must have shape (n, n)
                 consisting of consecutive integers starting from 0. If None, no symmetry
@@ -601,6 +623,8 @@ class V1(torch.nn.Module):
         self._osi_func = osi_func
         self.osi_prob = osi_prob
         self.f = f
+        self.space_x_ = space_x
+        self.kappa_x_ = kappa_x
         self.autapse = autapse
         self.mode = mode
         self.approx_order = approx_order
@@ -702,6 +726,8 @@ class V1(torch.nn.Module):
         else:
             space_product_kernel = space_strength_kernel * space_prob_kernel
 
+        # actually I think it's fine to just pass self.kappa instead of self.kappa_
+        # since Tensors are passed by reference
         kappa_kernel = (
             nn.Matrix(self.kappa_, "cell_type") if has_ct else nn.Scalar(self.kappa_)
         )
@@ -715,6 +741,10 @@ class V1(torch.nn.Module):
             "space": space_product_kernel,
             "ori": nn.Tuning(kappa_kernel, "ori", normalize=True),
         }
+        if self.space_x != (1.0, torch.inf):
+            product_kernel["space"] *= nn.SpaceGain(*self.space_x, "space")
+        if self.kappa_x != 0.0:
+            product_kernel["ori"] *= nn.Tuning(nn.Scalar(self.kappa_x), "ori", mode="x")
         strength_kernel = {
             "cell_type": product_kernel["cell_type"] / prob_kernel.get("cell_type", 1),
             "space": space_strength_kernel,
@@ -795,6 +825,14 @@ class V1(torch.nn.Module):
     def kappa_(self) -> Tensor:
         return self.kappa
 
+    @property
+    def space_x(self) -> tuple[float, float]:
+        return self.space_x_
+
+    @property
+    def kappa_x(self) -> float:
+        return self.kappa_x_
+
     def W(self, with_gain: bool = False, **kwargs) -> Tensor:
         W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
         if not with_gain:
@@ -865,6 +903,7 @@ class V1(torch.nn.Module):
             kappa,
             self.osi_func,
             self.osi_scale,
+            kappa_x=self.kappa_x,
             autapse=self.autapse,
             **self.wrapped_kwargs,
         )  # (*self.batch_shape, *broadcast_shapes(x.shape, y.shape))
@@ -956,6 +995,16 @@ class V1(torch.nn.Module):
             is instead a Tensor of connectivity weights.
 
         """
+        if (
+            output == "response"
+            and self.mode == "analytical"
+            and self.space_x != (1.0, torch.inf)
+        ):
+            raise ValueError(
+                "space_x cannot be specified when output == 'response' and mode == "
+                f"'analytical', but {self.space_x=}."
+            )
+
         if isinstance(to_dataframe, str) and to_dataframe not in {"tdfl", "pandas"}:
             raise ValueError(
                 "to_dataframe must be either 'tdfl', 'pandas', or bool, but got "
@@ -985,7 +1034,14 @@ class V1(torch.nn.Module):
             keys += ["space_dV"]
 
         if check_circulant:
-            cdim = _cdim(x.data[self.variables], ndim, rtol=1.0e-2, atol=1.0e-8)
+            affine_vars = set()
+            if self.space_x == (1.0, torch.inf):
+                affine_vars.add("space")
+            if self.kappa_x == 0.0:
+                affine_vars.add("ori")
+            cdim = _cdim(
+                x.data[self.variables], ndim, affine_vars, rtol=1.0e-2, atol=1.0e-8
+            )
         else:
             cdim = ()
         logger.debug(f"Assuming circulant dimensions are {cdim}, with {x.shape=}")
@@ -1066,16 +1122,26 @@ class V1(torch.nn.Module):
                 )
 
             W = self.forward(x, output="weight", ndim=ndim, to_dataframe=False)
+            reshape = ndim > 1 and not isinstance(W, CirculantTensor)
+            if reshape:
+                N_ = math.prod(W.shape[-ndim:])
+                W = W.reshape((*W.shape[: -2 * ndim], N_, N_))
             I = linalg.eye_like(W)  # (*bshape, *, *shape, *shape)
             dh = x.data[in_var]  # (*, *shape)
+            if reshape:
+                dh = dh.reshape((*dh.shape[:-ndim], N_))
+
             if self.mode == "matrix":
-                dr = torch.linalg.solve(I - W, dh)  # (*bshape, *, *shape)
+                dh = dh.unsqueeze(-1)
+                dr = torch.linalg.solve(I - W, dh).squeeze(-1)  # (*bshape, *, *shape)
             else:
                 dr = dh.clone()
                 dri = dh.unsqueeze(-1)
                 for _ in range(self.approx_order):
                     dri = W @ dri
                     dr += dri.squeeze(-1)
+            if reshape:
+                dr = dr.reshape((*dr.shape[:-1], *x.shape[-ndim:]))
 
         else:
             if self.dense or len(self.prob_kernel.funcs) == 0:
@@ -1194,13 +1260,13 @@ def _allconst(x, dim, **kwargs):
     return torch.allclose(x.narrow(dim, 0, n - 1), x.narrow(dim, 1, n - 1), **kwargs)
 
 
-def _cdim(x, ndim, **kwargs):
+def _cdim(x, ndim, affine_vars, **kwargs):
     cdim = []
     for dim in range(x.ndim - ndim, x.ndim):
         if all(
             _allconst(v, dim, **kwargs)
             or (
-                (k in {"space", "ori"})
+                (k in affine_vars)
                 and isinstance(v, PeriodicTensor)
                 and _allconst(v.diff(dim=dim), dim, **kwargs)
                 # note: this is currently not exhaustive since it does not check

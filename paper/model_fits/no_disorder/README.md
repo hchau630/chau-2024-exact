@@ -1,5 +1,5 @@
-# Commands for reproducing Figure 6
-Figure 6 subplots are organized differently than those of Figures 1-5. Below is a table of which figure file each subplot corresponds to.
+# Commands for reproducing Figure 6 and S6
+Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Below is a table of which figure file each subplot corresponds to.
 
 | Figure | Filename | Command (run in the current directory) |
 |--------|----------| -------------------------------------- |
@@ -11,6 +11,10 @@ Figure 6 subplots are organized differently than those of Figures 1-5. Below is 
 | 6F | `figures/compare_EI_space_0-49.pdf` | `INDICES=0-49 niarb plot plot/compare_EI_space.toml -o figures --linfo --progress` |
 | 6G | `figures/compare_gain_0.5_space_ct_0-49.pdf`, left subplot | `GAIN=0.5 INDICES=0-49 niarb plot plot/compare_gain_space_ct.toml -o figures --linfo --progress` |
 | 6H | `figures/compare_gain_0.5_ori_ct_0-49.pdf`, left subplot | `GAIN=0.5 INDICES=0-49 niarb plot plot/compare_gain_ori_ct.toml -o figures --linfo --progress` |
+| S6A | `figures/dist_0-49/gW_dist.pdf` | Same as 6A |
+| S6B | `figures/dist_0-49/sigma_dist.pdf` | Same as 6A |
+| S6C | `figures/dist_0-49/kappa_dist.pdf` | Same as 6A |
+| S6D | `figures/spectral_radius_0-49.pdf` | `INDICES=0-49 niarb plot plot/weights_eigvals.toml -o figures --linfo --progress` |
 
 The generated figures depend on the data files in `data`, the fitted model parameter files in `fits` and the fitted model perturbation response files in `runs`.
 

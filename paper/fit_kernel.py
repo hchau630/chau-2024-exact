@@ -163,7 +163,7 @@ def main():
         # fit_label = r"$W_{\alpha \beta}(r)$"
         if args.label == "G":
             fit_label = f"$G_{args.d}(r; λ)$"
-        y_label = r"E/IPSP $\times$ prob. (mV)"
+        y_label = r"E/IPSP $\times$ density (mV)"
         if args.ylabel == "prob":
             y_label = "Conn. probability"
     elif args.kernel == "real_resp":
@@ -272,15 +272,13 @@ def main():
 
         s[filename.stem] = (popt[0], pcov[0, 0] ** 0.5)
         scale = y_intercept / kernel(0.0, *popt) if y_intercept else 1.0
-        df[(filename.stem, "data")] = pd.DataFrame(
-            {
-                "x": x,
-                "y": scale * y,
-                "yerr": scale * yerr,
-                "ylow": scale * ylow,
-                "yhigh": scale * yhigh,
-            }
-        )
+        df[(filename.stem, "data")] = pd.DataFrame({"x": x, "y": scale * y})
+        if yerr is not None:
+            df[(filename.stem, "data")]["yerr"] = scale * yerr
+        if ylow is not None:
+            df[(filename.stem, "data")]["ylow"] = scale * ylow
+        if yhigh is not None:
+            df[(filename.stem, "data")]["yhigh"] = scale * yhigh
         x_ = x if args.x is None else np.arange(*args.x)
         df[(filename.stem, fit_label)] = pd.DataFrame(
             {"x": x_, "y": scale * kernel(x_, *popt)}

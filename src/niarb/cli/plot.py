@@ -90,6 +90,8 @@ def dataframe(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
     **kwargs,
 ) -> DataFrame:
     if isinstance(func, Sequence):
@@ -109,7 +111,15 @@ def dataframe(
         for k, v in tags.items():
             df[k] = pd.Categorical.from_codes([0] * len(df), categories=(v,))
 
-    df = process_dataframe(df, evals=evals, query=query, cuts=cuts, rolling=rolling)
+    df = process_dataframe(
+        df,
+        evals=evals,
+        query=query,
+        cuts=cuts,
+        rolling=rolling,
+        groupby_cols=groupby_cols,
+        groupby_agg=groupby_agg,
+    )
 
     return df
 
@@ -122,11 +132,21 @@ def plot(
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
     groupby: str | Sequence[str] | None = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
     progress: bool = False,
     leave: bool = True,
     **kwargs,
 ) -> dict[str, FacetGrid]:
-    df = process_dataframe(df, evals=evals, query=query, cuts=cuts, rolling=rolling)
+    df = process_dataframe(
+        df,
+        evals=evals,
+        query=query,
+        cuts=cuts,
+        rolling=rolling,
+        groupby_cols=groupby_cols,
+        groupby_agg=groupby_agg,
+    )
 
     figs = {}
     if groupby:
@@ -148,8 +168,20 @@ def process_dataframe(
     query: str | None = None,
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
-    rolling: dict[str, tuple[Sequence[int | float], int | float] | tuple[str, Sequence[int | float], int | float]] | None = None,
+    rolling: (
+        dict[
+            str,
+            tuple[Sequence[int | float], int | float]
+            | tuple[str, Sequence[int | float], int | float],
+        ]
+        | None
+    ) = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
 ) -> DataFrame:
+    if groupby_agg is None:
+        groupby_agg = {}
+
     if query:
         df = df.query(query)
 
@@ -179,5 +211,8 @@ def process_dataframe(
             else:
                 df = utils.rolling(df, k, *v)
 
-    return df
+    if groupby_cols:
+        groupby_agg = {k: tuple(v) for k, v in groupby_agg.items()}
+        df = df.groupby(groupby_cols, as_index=False, observed=True).agg(**groupby_agg)
 
+    return df

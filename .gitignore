@@ -1,14 +1,18 @@
-# don't include raw rossi data
+# some data to exclude (not used in paper)
 paper/rossi_data/raw
 paper/rossi_data/L23
+paper/oldenburg_data
 
 # don't include slurm log files that I have
 slurm
 
 # temporary
-paper/model_fits/fits
-paper/model_fits/runs
-paper/model_fits/figures
+paper/model_fits/disordered/fits
+paper/model_fits/disordered/runs
+paper/model_fits/disordered/figures
+paper/model_fits/no_disorder/fits
+paper/model_fits/no_disorder/runs
+paper/model_fits/no_disorder/figures
 
 # macOS
 .DS_Store

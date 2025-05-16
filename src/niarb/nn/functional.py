@@ -11,15 +11,11 @@ sqrtpi = torch.pi**0.5
 
 
 @overload
-def diff(x: PeriodicTensor, y: PeriodicTensor) -> PeriodicTensor: ...
+def diff(x: PeriodicTensor, y: float | Tensor | PeriodicTensor) -> PeriodicTensor: ...
 
 
 @overload
-def diff(x: PeriodicTensor, y: Tensor) -> PeriodicTensor: ...
-
-
-@overload
-def diff(x: Tensor, y: PeriodicTensor) -> PeriodicTensor: ...
+def diff(x: float | Tensor, y: PeriodicTensor) -> PeriodicTensor: ...
 
 
 @overload

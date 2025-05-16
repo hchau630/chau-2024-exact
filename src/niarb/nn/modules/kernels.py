@@ -24,6 +24,7 @@ __all__ = [
     "Monotonic",
     "Piecewise",
     "Tuning",
+    "SpaceGain",
     "RankOne",
     "Norm",
     "Radial",
@@ -404,16 +405,46 @@ class Piecewise(RadialBinOp):
 class Tuning(Kernel):
     n = 1
 
-    def __init__(self, kappa: Function, *args, normalize: bool = False, **kwargs):
+    def __init__(
+        self,
+        kappa: Function,
+        *args,
+        mode: str = "affine",
+        psi: float = 0.0,
+        normalize: bool = False,
+        **kwargs,
+    ):
+        if mode not in {"affine", "x", "y"}:
+            raise ValueError(f"mode must be 'affine', 'x', or 'y', but got {mode}.")
+
         super().__init__(*args, kernels=(kappa,), **kwargs)
+        self.mode = mode
+        self.psi = psi
         self.normalize = normalize
 
     def kernel(self, x: PeriodicTensor, y: PeriodicTensor, kappa: Tensor) -> Tensor:
-        theta = diff(x, y)
+        if self.mode == "affine":
+            theta = diff(x, y)
+        elif self.mode == "x":
+            theta = diff(x, self.psi)
+        else:
+            theta = diff(self.psi, y)
         out = 1 + 2 * kappa * torch.cos(theta.to_period(2 * torch.pi).norm(dim=-1))
         if self.normalize:
             out = out / theta.period
         return out
+
+
+class SpaceGain(Kernel):
+    n = 1
+
+    def __init__(self, baseline: float, sigma: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.b = baseline
+        self.s = sigma
+
+    def kernel(self, x: Tensor, _: Tensor) -> Tensor:
+        return self.b + (1 - self.b) * torch.exp(-(x.norm(dim=-1)**2) / (2 * self.s**2))
 
 
 class RankOne(Kernel):

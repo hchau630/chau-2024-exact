@@ -133,7 +133,7 @@ class PeriodicTensor(BaseTensor):
     def ginv(self):
         return -self
 
-    def gprod(self, other: Tensor) -> Self:
+    def gprod(self, other: float | Tensor) -> Self:
         out = self + other
         w_dims = out._w_dims
         if isinstance(w_dims, slice):
