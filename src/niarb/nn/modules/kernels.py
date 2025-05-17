@@ -25,6 +25,7 @@ __all__ = [
     "Piecewise",
     "Tuning",
     "SpaceGain",
+    "SpaceOriGain",
     "RankOne",
     "Norm",
     "Radial",
@@ -444,7 +445,28 @@ class SpaceGain(Kernel):
         self.s = sigma
 
     def kernel(self, x: Tensor, _: Tensor) -> Tensor:
-        return self.b + (1 - self.b) * torch.exp(-(x.norm(dim=-1)**2) / (2 * self.s**2))
+        return self.b + (1 - self.b) * torch.exp(
+            -(x.norm(dim=-1) ** 2) / (2 * self.s**2)
+        )
+
+
+class SpaceOriGain(Kernel):
+    n = 2
+
+    def __init__(self, baseline: float, sigma: float, kappa: float, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.b = baseline
+        self.s = sigma
+        self.k = kappa
+
+    def kernel(
+        self, x: Tensor, _: Tensor, theta: PeriodicTensor, __: PeriodicTensor
+    ) -> Tensor:
+        r = x.norm(dim=-1)
+        theta = theta.to_period(2 * torch.pi).norm(dim=-1)
+        return self.b + (1 - self.b) * torch.exp(-(r**2) / (2 * self.s**2)) * (
+            1 + 2 * self.k * torch.cos(theta)
+        )
 
 
 class RankOne(Kernel):

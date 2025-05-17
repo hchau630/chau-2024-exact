@@ -253,6 +253,7 @@ class TestV1:
             )  # (M, M)
 
         expected = W
+        gain = 1.0
 
         if "space" in variables:
             r = functional.diff(x["space"][:, None], x["space"][None, :])
@@ -262,19 +263,33 @@ class TestV1:
             )
             if d > 1:
                 expected[r == 0] = 0.0
-            r = x["space"][:, None].norm(dim=-1)  # (M, 1)
-            b, s = space_x
-            expected = expected * (b + (1 - b) * torch.exp(-(r**2) / (2 * s**2)))
+            if space_x != (1.0, torch.inf):
+                b, s = space_x
+                r = x["space"][:, None].norm(dim=-1)  # (M, 1)
+                gain = b + (1 - b) * torch.exp(-(r**2) / (2 * s**2))
 
         if "ori" in variables:
             theta = functional.diff(x["ori"][:, None], x["ori"][None, :])
             theta = theta.tensor.squeeze(-1) / 90.0 * torch.pi  # (M, M)
             expected = expected * (1 + 2 * kappa * torch.cos(theta)) / N_ori
-            x_theta = x["ori"][:, None].norm(dim=-1) / 90.0 * torch.pi  # (M, 1)
-            expected = expected * (1 + 2 * kappa_x * torch.cos(x_theta))
+            if kappa_x != 0.0:
+                x_theta = x["ori"][:, None].norm(dim=-1) / 90.0 * torch.pi  # (M, 1)
+                gain = 1 + 2 * kappa_x * torch.cos(x_theta)
+
+        if (
+            "space" in variables
+            and "ori" in variables
+            and space_x != (1.0, torch.inf)
+            and kappa_x != 0.0
+        ):
+            gain = b + (1 - b) * torch.exp(-(r**2) / (2 * s**2)) * (
+                1 + 2 * kappa_x * torch.cos(x_theta)
+            )
 
         if "osi" in variables:
             expected = expected / N_osi
+
+        expected = expected * gain
 
         torch.testing.assert_close(out, expected)
 

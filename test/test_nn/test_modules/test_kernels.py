@@ -1,3 +1,5 @@
+from math import exp
+
 import torch
 import pytest
 
@@ -174,6 +176,27 @@ def test_tuning(x, y):
     # Δ ori = [45, 90, 0, 45], cos(Δ ori) = [0, -1, 1, 0]
     # 2 * kappa = [1, 3, 4, 2]
     expected = torch.tensor([1.0, -2.0, 5.0, 1.0])
+    torch.testing.assert_close(out, expected)
+
+
+def test_space(x, y):
+    space_x = (0.5, 2.0)
+    kernel = nn.SpaceGain(*space_x, "space")
+    out = kernel(x, y)
+    # space = [0, 1, 2, 3]
+    expected = torch.tensor(
+        [1.0, 0.9412484512922977, 0.803265329856316, 0.6623262336791749]
+    )
+    torch.testing.assert_close(out, expected)
+
+
+def test_space_ori(x, y):
+    space_x = (0.5, 2.0)
+    kappa_x = 0.5
+    kernel = nn.SpaceOriGain(*space_x, kappa_x, ["space", "ori"])
+    out = kernel(x, y)
+    # space = [0, 1, 2, 3], ori = [-45, 0, 45, 90]
+    expected = torch.tensor([1.0, 1.3824969025845955, 0.8032653298563167, 0.5])
     torch.testing.assert_close(out, expected)
 
 

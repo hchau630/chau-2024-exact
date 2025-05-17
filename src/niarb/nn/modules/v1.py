@@ -408,9 +408,12 @@ class V1(torch.nn.Module):
                 Ignored if "osi" not in variables.
             f (optional): Model nonlinearity. If None, model is linear.
             space_x (optional): Multiply connectivity by nn.SpaceGain(*space_x, "space").
+                If kappa_x is also provided, then connectivity is multiplied by
+                nn.SpaceOriGain(*space_x, kappa_x, ["space", "ori"]) instead.
                 Note that the response cannot be computed when mode == "analytical" and
                 space_x is not default.
             kappa_x (optional): Multiply connectivity by 1 + 2 * kappa_x * cos(x["ori"]).
+                See above if space_x is also provided.
             sigma_symmetry (optional): Symmetries in sigma. If a string, must be one of
                 {"pre", "post", "full"}. If tensor-like, must have shape (n, n)
                 consisting of consecutive integers starting from 0. If None, no symmetry
@@ -741,9 +744,18 @@ class V1(torch.nn.Module):
             "space": space_product_kernel,
             "ori": nn.Tuning(kappa_kernel, "ori", normalize=True),
         }
-        if self.space_x != (1.0, torch.inf):
+        if (
+            "space" in self.variables
+            and "ori" in self.variables
+            and self.space_x != (1.0, torch.inf)
+            and self.kappa_x != 0.0
+        ):
+            product_kernel["space"] *= nn.SpaceOriGain(
+                *self.space_x, self.kappa_x, ["space", "ori"]
+            )
+        elif "space" in self.variables and self.space_x != (1.0, torch.inf):
             product_kernel["space"] *= nn.SpaceGain(*self.space_x, "space")
-        if self.kappa_x != 0.0:
+        elif "ori" in self.variables and self.kappa_x != 0.0:
             product_kernel["ori"] *= nn.Tuning(nn.Scalar(self.kappa_x), "ori", mode="x")
         strength_kernel = {
             "cell_type": product_kernel["cell_type"] / prob_kernel.get("cell_type", 1),
