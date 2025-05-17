@@ -1,0 +1,23 @@
+batch_size = 1
+dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
+# add grating with standard deviation of 44 degrees * 22 μm/deg = 968 μm
+pipeline.model = { __ref__ = ["fit.toml", "validation_pipeline", "model"], space_x = [0.5, 968.0] }
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/resps_space_gain/{filename}.pkl"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
