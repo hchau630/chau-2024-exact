@@ -1,7 +1,7 @@
 tag_names = ["gain", "path", "loss"]
 
 [dataframes.__matrix__]
-gain = ["gain-1", { __format__ = "{KIND}_gain" }, "gain-0.5"]
+gain = ["gain-1", "gain-0.5", { __format__ = "{KIND}_gain" }]
 path = { __call__ = ["niarb.io", "iterdir"], path = { __format__ = "runs/resps_{KIND}_gain" }, pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
 
 [[dataframes.__include__]]
@@ -19,7 +19,7 @@ kind = "line"
 x = "distance"
 y = "dr"
 hue = "gain"
-hue_order = ["gain-1", { __format__ = "{KIND}_gain" }, "gain-0.5"]
+hue_order = ["gain-1", "gain-0.5", { __format__ = "{KIND}_gain" }]
 col = "cell_type"
 col_order = ["PYR", "PV"]
 errordim = "loss"
@@ -28,7 +28,7 @@ errorbar = "sd"
 grid = "yzero"
 height = 1.75
 aspect = 1
-# palette = ["#1F77B4", "#89C8ED"]
+palette = ["#1F77B4", "#89C8ED", "#ED1C24"]
 legend_loc = "upper right"
 facet_kws = { sharey = false }
 err_kws = { linewidth = 0.5 }
