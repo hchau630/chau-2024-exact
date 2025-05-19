@@ -38,9 +38,9 @@ def response(variables, kappa_x, state_dict, mode, N_ori=360):
         return model(x, ndim=ndim, to_dataframe="pandas")
 
 
-def plot_comparison(path):
+def plot_comparison(path, index):
     variables = ["cell_type", "ori"]
-    loss = io.iterdir(path, pattern="*.pt", indices=0, stem=True)
+    loss = io.iterdir(path, pattern="*.pt", indices=index, stem=True)
     print(f"{loss=}")
     state_dict = torch.load(path / f"{loss}.pt", map_location="cpu", weights_only=True)
     kappa_x = np.arange(6) / 10
@@ -139,10 +139,11 @@ def main():
     parser.add_argument("--scale-g", "-g", action="store_true")
     parser.add_argument("--cell-type", "-c", action="store_true")
     parser.add_argument("-n", type=int, default=50)
+    parser.add_argument("-i", type=int, default=0)
     args = parser.parse_args()
 
     if args.plot == "comparison":
-        g = plot_comparison(args.path)
+        g = plot_comparison(args.path, args.i)
     else:
         g = plot_scaling(args.path, args.scale_g, args.cell_type, args.n)
     plt.show()

@@ -594,6 +594,7 @@ class TestV1:
             variables, cell_types=(CellType.PYR, CellType.PV), kappa_x=kappa_x
         )
         state_dict = get_state_dict(model.n, None)
+        state_dict["gW"] *= 9
         model.load_state_dict(state_dict, strict=False)
         expected_model = copy.deepcopy(model)
         expected_model.mode = "matrix"

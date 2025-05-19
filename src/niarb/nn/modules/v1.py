@@ -200,8 +200,9 @@ def resolvent(
             # l = -1, out and W has shape (*BW, 2, n, n)
             L0, L1 = out[..., 0, :, :], out[..., 1, :, :]  # (*BW, n, n)
             Q = 2 * kappa_x**2 * L1 @ L0  # (*BW, n, n)
-            T = 0.5 * (eye - torch.linalg.inv(eye + 2 * kappa_x**2 * L0 @ L1))
-            out += (out + eye) @ torch.stack([Q, T], dim=-3)  # (*BW, 2, n, n)
+            T = 0.5 * (torch.linalg.inv(eye - 2 * kappa_x**2 * L0 @ L1) - eye)
+            out[..., 0, :, :] = (L0 + eye) @ torch.linalg.inv(eye - Q) - eye
+            out[..., 1, :, :] = L1 + (L1 + eye) @ T
         out = utils.take_along_dims(
             out, i[..., None, None], j[..., None, None]
         )  # (*BWxy, [2])
