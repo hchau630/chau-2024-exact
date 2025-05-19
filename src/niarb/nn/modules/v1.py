@@ -195,16 +195,13 @@ def resolvent(
         out = func(r).real  # (*BWxy, [2])
     else:
         eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n, n)
-        if kappa_x == 0.0:
-            out = (eye - torch.linalg.inv(l * W + eye)) / l  # (*BW, [2], n, n)
-        else:
-            # l = -1, W has shape (*BW, 2, n, n)
-            out = torch.linalg.inv(eye - W)  # (*BW, 2, n, n)
-            Q = 2 * kappa_x**2 * (out[..., 1, :, :] - eye)
-            out[0] = torch.linalg.inv(eye - (eye + Q) @ W[..., 0, :, :])
-            T = 0.5 * W[..., 0, :, :] @ out[0] @ Q
-            out[1] = out[1] @ (eye + T)
-            out = out - eye
+        out = (eye - torch.linalg.inv(l * W + eye)) / l  # (*BW, [2], n, n)
+        if kappa_x != 0.0:
+            # l = -1, out and W has shape (*BW, 2, n, n)
+            L0, L1 = out[..., 0, :, :], out[..., 1, :, :]  # (*BW, n, n)
+            Q = 2 * kappa_x**2 * L1 @ L0  # (*BW, n, n)
+            T = 0.5 * (eye - torch.linalg.inv(eye + 2 * kappa_x**2 * L0 @ L1))
+            out += (out + eye) @ torch.stack([Q, T], dim=-3)  # (*BW, 2, n, n)
         out = utils.take_along_dims(
             out, i[..., None, None], j[..., None, None]
         )  # (*BWxy, [2])
