@@ -1,4 +1,4 @@
-# Commands for reproducing Figure 6 and S6
+# Commands for reproducing Figure 6, S6, and S8
 Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Below is a table of which figure file each subplot corresponds to.
 
 | Figure | Filename | Command (run in the current directory) |
@@ -15,6 +15,14 @@ Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Be
 | S6B | `figures/dist_0-49/sigma_dist.pdf` | Same as 6A |
 | S6C | `figures/dist_0-49/kappa_dist.pdf` | Same as 6A |
 | S6D | `figures/spectral_radius_0-49.pdf` | `INDICES=0-49 niarb plot plot/weights_eigvals.toml -o figures --linfo --progress` |
+| S8A-C (left) | -- | See `paper/README.md` |
+| S8A (center) | `figures/compare_gain_space_ct2_space_0-49.pdf` | `KIND=space INDICES=0-49 niarb plot plot/compare_gain_space_ct2.toml -o figures --linfo --progress` |
+| S8A (right) | `figures/compare_gain_ori_ct2_space_0-49.pdf` | `KIND=space INDICES=0-49 niarb plot plot/compare_gain_ori_ct2.toml -o figures --linfo --progress` |
+| S8B (center) | `figures/compare_gain_space_ct2_ori_0-47.pdf` | `KIND=ori INDICES=0-47 niarb plot plot/compare_gain_space_ct2.toml -o figures --linfo --progress` |
+| S8B (right) | `figures/compare_gain_ori_ct2_ori_0-47.pdf` | `KIND=ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2.toml -o figures --linfo --progress` |
+| S8C (center) | `figures/compare_gain_space_ct2_space_ori_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_space_ct2.toml -o figures --linfo --progress` |
+| S8C (right) | `figures/compare_gain_ori_ct2_space_ori_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2.toml -o figures --linfo --progress` |
+| S8D | `figures/compare_gain_ori_ct2_space_ori_indiv_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2_indiv.toml -o figures --linfo --progress` |
 
 The generated figures depend on the data files in `data`, the fitted model parameter files in `fits` and the fitted model perturbation response files in `runs`.
 

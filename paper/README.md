@@ -37,6 +37,10 @@
 | S7C inset | `python paper/plot_znamenskiy.py paper/znamenskiy_data/EI.csv -o paper/figures/supp/S7_c.pdf` |
 | S7D inset | `python paper/plot_znamenskiy.py paper/znamenskiy_data/ori/EI.csv --ori -o paper/figures/supp/S7_d.pdf` |
 | S7B-J | See `paper/model_fits/disordered/README.md` |
+| S8A (left) | `python paper/plot_gain.py -b 0.5 -s 968 -y 1.55 -o paper/figures/supp/S8_a.pdf` |
+| S8B (left) | `python paper/plot_gain.py -b 0.5 -k 0.5 -y 1.55 -o paper/figures/supp/S8_b.pdf` |
+| S8C (left) | `python paper/plot_gain.py -b 0.5 -s 968 -k 0.5 -y 1.55 -o paper/figures/supp/S8_c.pdf` |
+| S8A-C (center, right), S8D | See `paper/model_fits/no_disorder/README.md` |
 
 # Additional commands
 - To get the data files `paper/product_data/EI.csv` and `paper/product_data/IE.csv` used in the generation of Figure 1B, run\
