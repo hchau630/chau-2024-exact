@@ -22,7 +22,7 @@ Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Be
 | S8B (right) | `figures/compare_gain_ori_ct2_ori_0-47.pdf` | `KIND=ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2.toml -o figures --linfo --progress` |
 | S8C (center) | `figures/compare_gain_space_ct2_space_ori_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_space_ct2.toml -o figures --linfo --progress` |
 | S8C (right) | `figures/compare_gain_ori_ct2_space_ori_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2.toml -o figures --linfo --progress` |
-| S8D | `figures/compare_gain_ori_ct2_space_ori_indiv_0-47.pdf` | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2_indiv.toml -o figures --linfo --progress` |
+| S8D | `figures/compare_gain_ori_ct2_space_ori_indiv_0-47.pdf` (loss of 0.12357 and 0.20226) | `KIND=space_ori INDICES=0-47 niarb plot plot/compare_gain_ori_ct2_indiv.toml -o figures --linfo --progress` |
 
 The generated figures depend on the data files in `data`, the fitted model parameter files in `fits` and the fitted model perturbation response files in `runs`.
 
