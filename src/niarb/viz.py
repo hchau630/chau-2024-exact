@@ -107,6 +107,7 @@ def figplot(
             raise ValueError("stat=True requires 'x' and 'y' to be specified.")
 
         statplot = {sns.catplot: catstatplot, lmplot: lmstatplot}.get(func)
+        statplot = mapped(statplot, mapping)
         if statplot is None:
             raise ValueError(f"stat=True is not supported for {func}.")
         g.map_dataframe(statplot, x=kwargs["x"], y=kwargs["y"], **(stat_kws or {}))
@@ -286,6 +287,7 @@ def catstatplot(
     if isinstance(test, str):
         test = getattr(stats, test)
 
+    logger.debug(f"data:\n{data}")
     xs, samples = zip(*data.groupby(x)[y])
     logger.debug(f"xs:\n{xs}")
     logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))

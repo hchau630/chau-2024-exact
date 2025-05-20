@@ -23,7 +23,7 @@ hue = "gain"
 hue_order = ["gain-1", "gain-0.5", { __format__ = "{KIND}_gain" }]
 col = "loss"
 col_wrap = 10
-errordim = "loss"
+errordim = "instance_idx"
 errorbar = "se"
 grid = "yzero"
 height = 1.75

@@ -30,7 +30,7 @@ grid = "yzero"
 height = 1.75
 aspect = 1
 legend_loc = "upper right"
-facet_kws = { sharey = false }
+sharey = false
 err_kws = { linewidth = 0.5 }
 
 [plots.mapping]
