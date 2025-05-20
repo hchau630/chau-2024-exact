@@ -3,6 +3,7 @@ import functools
 import importlib
 import inspect
 import math
+from numbers import Number
 from collections.abc import Sequence, Callable
 from itertools import accumulate
 
@@ -101,7 +102,7 @@ def figplot(
 
     logger.debug(f"data:\n{data}")
 
-    g = mapped(func, mapping)(data, **kwargs)
+    g = mapped(func, mapping)(data, stat=stat, **kwargs)
     if stat:
         func = lmstatplot if func == lmplot else statplot
         func = mapped(func, mapping)
@@ -154,7 +155,7 @@ def figplot(
     return g
 
 
-def relplot(data=None, *, x=None, y=None, **kwargs):
+def relplot(data=None, *, x=None, y=None, stat=False, **kwargs):
     if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
         data[x] = utils.get_interval_mid(data[x])
@@ -163,8 +164,9 @@ def relplot(data=None, *, x=None, y=None, **kwargs):
 
     # for some reason seaborn is very memory-inefficient, so manually do groupby
     # if errorbar is "se", "sd", or None. This is important for plotting large
-    # dataframes such as when plotting weights.
-    if "errorbar" in kwargs and any(
+    # dataframes such as when plotting weights. Also avoid doing this if
+    # stat is True, since we need to pass the raw data to statplot.
+    if "errorbar" in kwargs and stat is False and any(
         kwargs["errorbar"] == k for k in {"se", "sd", None}
     ):
         errorbar = kwargs["errorbar"]
@@ -270,6 +272,7 @@ def statplot(
     alphas: Sequence[float] = (0.05, 0.01, 0.001),
     ax: Axes | None = None,
     ha: str = "center",
+    va: str = "center",
     **kwargs,
 ) -> Text:
     if x is None or y is None:
@@ -290,33 +293,44 @@ def statplot(
     if isinstance(test, str):
         test = getattr(stats, test)
 
+    if utils.is_interval_dtype(data[x].dtype):
+        data = data.copy()
+        data[x] = utils.get_interval_mid(data[x])
+
     logger.debug(f"data:\n{data}")
-    xs, samples = zip(*data.groupby(x)[y])
+    xs, dfs = zip(*data.groupby(x, observed=True))
     logger.debug(f"xs:\n{xs}")
-    logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
     try:
-        if kind == "nsamp" and hue is None:
-            pvalues = [test(*samples, **test_kws).pvalue]
-        elif kind == "nsamp":
-            pvalues = [test(s, **test_kws).pavlue for _, s in samples.groupby(hue)]
+        if hue is not None:
+            pvalues = []
+            for _x, df in zip(xs, dfs):
+                _, samples = zip(*df.groupby(hue, observed=True)[y])
+                logger.debug("x:%s, samples:\n%s", x, "\n".join(str(s.tolist()) for s in samples))
+                pvalues.append(test(*samples, **test_kws).pvalue.item())
         else:
-            pvalues = [test(s, **test_kws).pvalue for s in samples]
+            samples = [df[y] for df in dfs]
+            logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
+            if kind == "nsamp":
+                pvalues = [test(*samples, **test_kws).pvalue.item()]
+            else:
+                pvalues = [test(s, **test_kws).pvalue.item() for s in samples]
     except ValueError as err:
         logger.error(str(err))
         return
 
-    logger.debug(f"{pvalues=}")
+    if kind == "1samp":
+        logger.info(f"p-value: {pvalues[0]}")
+    else:
+        logger.info(f"p-values: {dict(zip(xs, pvalues, strict=True))}")
 
     texts = []
     for pvalue in pvalues:
-        if pvalue >= alphas[0]:
-            continue
-
         if np.isnan(pvalue):
             logger.warning("p-value is NaN.")
-            continue
-
-        if pvalue >= alphas[1]:
+            text = None
+        elif pvalue >= alphas[0]:
+            text = None
+        elif pvalue >= alphas[1]:
             text = "*"
         elif pvalue >= alphas[2]:
             text = "**"
@@ -324,18 +338,19 @@ def statplot(
             text = "***"
         texts.append(text)
 
-    if not pd.api.types.is_numeric_dtype(data[x]):
+    if not all(isinstance(x, Number) for x in xs):
         xs = range(len(xs))
-    ys = (s.mean() for s in samples)
 
-    if len(pvalues) == 1:
+    if kind == "1samp":
         xs = [sum(xs) / len(xs)]
-        ys = [max(ys)]
 
     if ax is None:
         ax = plt.gca()
 
-    objs = [ax.text(x, y, text, ha=ha, **kwargs) for x, y, text in zip(xs, ys, texts)]
+    y = ax.get_ylim()[1]
+    it = list(zip(xs, texts, strict=True))
+    logger.debug(str(it))
+    objs = [ax.text(x, y, text, ha=ha, va=va, **kwargs) for x, text in it if text]
     return objs
 
 

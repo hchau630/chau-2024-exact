@@ -9,16 +9,17 @@ loss = { __eval__ = "float(path)" }
 func = ["niarb.io", "load_data"]
 paths = { __format__ = "runs/resps_{gain}/{path}.pkl", gain = { __eval__ = "gain" }, path = { __eval__ = "path" } }
 query = "distance > 25"
-cuts = { rel_ori = [0, 22.5, 67.5, 90] }
+cuts = { rel_ori = { __array__ = "-5:96:10" } }
 # rolling = { rel_ori = [{ __array__ = "0:90:10j" }, 25.0] }
 
 [[plots]]
 name = { __format__ = "compare_gain_ori_ct2_{KIND}_stats_{INDICES}" }
-func = "catplot"
-kind = "bar"
-x = "gain"
+func = "relplot"
+kind = "line"
+x = "rel_ori"
 y = "dr"
-hue = "rel_ori"
+hue = "gain"
+hue_order = ["gain-1", { __format__ = "{KIND}_gain" }]
 col = "cell_type"
 col_order = ["PYR", "PV"]
 stat = true
@@ -27,10 +28,11 @@ errordim = "loss"
 # errorbar = "pi"
 errorbar = "sd"
 grid = "yzero"
-height = 1.75
+height = 4
 aspect = 1
+palette = ["#1F77B4", "#ED1C24"]
 legend_loc = "upper right"
-sharey = false
+facet_kws = { sharey = false }
 err_kws = { linewidth = 0.5 }
 
 [plots.mapping]
