@@ -103,13 +103,9 @@ def figplot(
 
     g = mapped(func, mapping)(data, **kwargs)
     if stat:
-        if "x" not in kwargs or "y" not in kwargs:
-            raise ValueError("stat=True requires 'x' and 'y' to be specified.")
-
-        statplot = {sns.catplot: catstatplot, lmplot: lmstatplot}.get(func)
-        if statplot is None:
-            raise ValueError(f"stat=True is not supported for {func}.")
-        g.map_dataframe(statplot, x=kwargs["x"], y=kwargs["y"], **(stat_kws or {}))
+        func = lmstatplot if func == lmplot else statplot
+        stat_kws = {k: kwargs.get(k) for k in {"x", "y", "hue"}} | (stat_kws or {})
+        g.map_dataframe(func, **stat_kws)
 
     # more compact subplot titles
     if isinstance(g, sns.FacetGrid):
@@ -261,11 +257,12 @@ def histplot(data=None, *, x=None, color=None, label=None, bins="auto", **kwargs
     return sns.histplot(data, x=x, color=color, label=label, bins=bins, **kwargs)
 
 
-def catstatplot(
+def statplot(
     data: DataFrame | None = None,
     *,
     x: str | None = None,
     y: str | None = None,
+    hue: str | None = None,
     kind: str = "nsamp",
     test: Callable | str | None = None,
     test_kws: dict | None = None,
@@ -274,8 +271,14 @@ def catstatplot(
     ha: str = "center",
     **kwargs,
 ) -> Text:
+    if x is None or y is None:
+        raise ValueError("x and y cannot be None.")
+
     if kind not in {"nsamp", "1samp"}:
-        raise ValueError(f"'kind' must be either 'nsamp' or '1samp', but got {kind}.")
+        raise ValueError(f"'kind' must be either 'nsamp' or '1samp', but got {kind=}.")
+
+    if kind == "1samp" and hue is not None:
+        raise ValueError(f"'hue' is not supported for '1samp' tests, but got {hue=}.")
 
     if test is None:
         test = {"nsamp": "f_oneway", "1samp": "ttest_1samp"}[kind]
@@ -290,8 +293,10 @@ def catstatplot(
     logger.debug(f"xs:\n{xs}")
     logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
     try:
-        if kind == "nsamp":
+        if kind == "nsamp" and hue is None:
             pvalues = [test(*samples, **test_kws).pvalue]
+        elif kind == "nsamp":
+            pvalues = [test(s, **test_kws).pavlue for _, s in samples.groupby(hue)]
         else:
             pvalues = [test(s, **test_kws).pvalue for s in samples]
     except ValueError as err:
@@ -321,7 +326,7 @@ def catstatplot(
         xs = range(len(xs))
     ys = (s.mean() for s in samples)
 
-    if kind == "nsamp":
+    if len(pvalues) == 1:
         xs = [sum(xs) / len(xs)]
         ys = [max(ys)]
 
