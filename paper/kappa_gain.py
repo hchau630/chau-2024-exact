@@ -9,6 +9,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from niarb import neurons, nn, perturbation, viz, io
+from niarb.dataframe import from_state_dict
 from niarb.cell_type import CellType
 
 
@@ -132,10 +133,53 @@ def plot_scaling(path, scale_g, cell_type, n):
     return g
 
 
+def plot_L(path, n):
+    ords = [1, 2, torch.inf]
+    variables = ["cell_type", "ori"]
+    losses = io.iterdir(path, pattern="*.pt", indices=range(n), stem=True)
+
+    df = {}
+    for loss in tqdm(losses):
+        state_dict = torch.load(
+            path / f"{loss}.pt", map_location="cpu", weights_only=True
+        )
+        model = nn.V1(variables, cell_types=(CellType.PYR, CellType.PV))
+        model.load_state_dict(state_dict, strict=False)
+        W0 = model.W(with_gain=True)
+        W = torch.stack([W0, W0 * model.kappa])
+        assert W.shape == (2, 2, 2)
+        eye = torch.eye(model.n)
+        L = torch.linalg.inv(eye - W) - eye
+        norm_L = torch.stack(
+            [torch.linalg.matrix_norm(L, ord=p) for p in ords]
+        )  # (len(ords), 2)
+        df[loss] = from_state_dict(
+            {r"$||L_n||_p$": norm_L},
+            dims={r"$||L_n||_p$": ["p", "n"]},
+            coords={r"$||L_n||_p$": [ords, [0, 1]]},
+        )
+    df = pd.concat(df, names=["Loss"]).reset_index(0).reset_index(drop=True)
+    df = df.pivot(index=["Loss", "p", "n"], columns="variable", values="value")
+    df = df.reset_index()
+    g = viz.figplot(
+        df,
+        "catplot",
+        kind="bar",
+        x="n",
+        y=r"$||L_n||_p$",
+        hue="p",
+        col="Loss",
+        col_wrap=10,
+        height=1.5,
+        sharey=False,
+    )
+    return g
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("path", type=Path)
-    parser.add_argument("--plot", "-p", choices={"comparison", "scaling"})
+    parser.add_argument("--plot", "-p", choices={"comparison", "scaling", "L"})
     parser.add_argument("--scale-g", "-g", action="store_true")
     parser.add_argument("--cell-type", "-c", action="store_true")
     parser.add_argument("-n", type=int, default=50)
@@ -144,8 +188,10 @@ def main():
 
     if args.plot == "comparison":
         g = plot_comparison(args.path, args.i)
-    else:
+    elif args.plot == "scaling":
         g = plot_scaling(args.path, args.scale_g, args.cell_type, args.n)
+    else:
+        g = plot_L(args.path, args.n)
     plt.show()
 
 
