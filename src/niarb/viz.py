@@ -167,7 +167,9 @@ def relplot(data=None, *, x=None, y=None, **kwargs):
     # for some reason seaborn is very memory-inefficient, so manually do groupby
     # if errorbar is "se", "sd", or None. This is important for plotting large
     # dataframes such as when plotting weights.
-    if "errorbar" in kwargs and any(kwargs["errorbar"] == k for k in {"se", "sd", None}):
+    if "errorbar" in kwargs and any(
+        kwargs["errorbar"] == k for k in {"se", "sd", None}
+    ):
         errorbar = kwargs["errorbar"]
         by = [x] + [
             v
@@ -264,16 +266,19 @@ def catstatplot(
     *,
     x: str | None = None,
     y: str | None = None,
-    kind: str = "ind",
-    test: Callable | str = "ttest_ind",
+    kind: str = "nsamp",
+    test: Callable | str | None = None,
     test_kws: dict | None = None,
     alphas: Sequence[float] = (0.05, 0.01, 0.001),
     ax: Axes | None = None,
     ha: str = "center",
     **kwargs,
 ) -> Text:
-    if kind not in {"ind", "1samp"}:
-        raise ValueError(f"'kind' must be either 'ind' or '1samp', but got {kind}.")
+    if kind not in {"nsamp", "1samp"}:
+        raise ValueError(f"'kind' must be either 'nsamp' or '1samp', but got {kind}.")
+
+    if test is None:
+        test = {"nsamp": "f_oneway", "1samp": "ttest_1samp"}[kind]
 
     if test_kws is None:
         test_kws = {}
@@ -285,7 +290,7 @@ def catstatplot(
     logger.debug(f"xs:\n{xs}")
     logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
     try:
-        if kind == "ind":
+        if kind == "nsamp":
             pvalues = [test(*samples, **test_kws).pvalue]
         else:
             pvalues = [test(s, **test_kws).pvalue for s in samples]
@@ -316,7 +321,7 @@ def catstatplot(
         xs = range(len(xs))
     ys = (s.mean() for s in samples)
 
-    if kind == "ind":
+    if kind == "nsamp":
         xs = [sum(xs) / len(xs)]
         ys = [max(ys)]
 
