@@ -1,5 +1,5 @@
 batch_size = 1
-pipeline.model = { __ref__ = ["fit.toml", "validation_pipeline", "model"], kappa_x = 0.25 }
+pipeline.model = { __ref__ = ["fit.toml", "validation_pipeline", "model"], space_x = [{ __call__ = ["builtins", "float", { __environ__ = "GAIN" }] }, { __call__ = ["builtins", "float", "inf"] }], kappa_x = 0.5 }
 
 [dataset]
 abs_window = [600.0, 600.0]
@@ -18,7 +18,7 @@ w_dims = []
 N = [1]
 cell_probs = [{ PYR = 1.0 }]
 space = [["uniform", [550.0, 550.0]]]
-repeats = [50]
+repeats = [20]
 
 [dataset.metrics]
 distance = "min_distance_to_ensemble"
@@ -34,7 +34,7 @@ pattern = "*.pt"
 indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
 
 [out]
-__format__ = "runs/resps_ori_gain/{filename}.pkl"
+__format__ = "runs/resps_ori_gain-{GAIN}/{filename}.pkl"
 
 [out.filename]
 __call__ = ["niarb.io", "iterdir"]

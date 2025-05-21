@@ -1,8 +1,8 @@
 tag_names = ["gain", "path", "loss"]
 
 [dataframes.__matrix__]
-gain = ["gain-1", "gain-0.5", { __format__ = "{KIND}_gain" }]
-path = { __call__ = ["niarb.io", "iterdir"], path = { __format__ = "runs/resps_{KIND}_gain" }, pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
+gain = ["gain-1", { __format__ = "gain-{GAIN}" }, { __format__ = "{KIND}_gain-{GAIN}" }]
+path = { __call__ = ["niarb.io", "iterdir"], path = { __format__ = "runs/resps_{KIND}_gain-{GAIN}" }, pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
 
 [[dataframes.__include__]]
 loss = { __eval__ = "float(path)" }
@@ -13,13 +13,13 @@ cuts = { distance = { __array__ = "25:643:2" } }
 # rolling = { distance = [{ __array__ = "33.7:642.1:40j" }, 60.0] }
 
 [[plots]]
-name = { __format__ = "compare_gain_space_ct2_{KIND}_{INDICES}" }
+name = { __format__ = "compare_gain_{GAIN}_space_ct2_{KIND}_{INDICES}" }
 func = "relplot"
 kind = "line"
 x = "distance"
 y = "dr"
 hue = "gain"
-hue_order = ["gain-1", "gain-0.5", { __format__ = "{KIND}_gain" }]
+hue_order = ["gain-1", { __format__ = "gain-{GAIN}" }, { __format__ = "{KIND}_gain-{GAIN}" }]
 col = "cell_type"
 col_order = ["PYR", "PV"]
 errordim = "loss"

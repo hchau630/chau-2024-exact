@@ -1,7 +1,29 @@
 batch_size = 1
-dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
 # add grating with standard deviation of 44 degrees * 22 μm/deg = 968 μm
-pipeline.model = { __ref__ = ["fit.toml", "validation_pipeline", "model"], space_x = [0.5, 968.0] }
+pipeline.model = { __ref__ = ["fit.toml", "validation_pipeline", "model"], space_x = [{ __call__ = ["builtins", "float", { __environ__ = "GAIN" }] }, 968.0] }
+
+[dataset]
+abs_window = [600.0, 600.0]
+N_instantiations = 10
+
+[dataset.neurons]
+N = 24000
+variables = ["cell_type", "space", "ori"]
+cell_types = ["PYR", "PV"]
+cell_probs = [0.85, 0.15]
+space_extent = [900.0, 900.0]
+min_dist = 3.0
+w_dims = []
+
+[dataset.perturbations.configs.__matrix__]
+N = [1]
+cell_probs = [{ PYR = 1.0 }]
+space = [["uniform", [550.0, 550.0]]]
+repeats = [20]
+
+[dataset.metrics]
+distance = "min_distance_to_ensemble"
+rel_ori = "abs_relative_ori"
 
 [state_dict]
 __call__ = ["niarb.io", "load_state_dict"]
@@ -13,7 +35,7 @@ pattern = "*.pt"
 indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
 
 [out]
-__format__ = "runs/resps_space_gain/{filename}.pkl"
+__format__ = "runs/resps_space_gain-{GAIN}/{filename}.pkl"
 
 [out.filename]
 __call__ = ["niarb.io", "iterdir"]
