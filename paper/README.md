@@ -11,8 +11,7 @@
 | 2C | `python paper/response.py --wee 4.5 1.5 1.5 --wei 3 3 2 --wie 2 2.5 2.5 --wii 0 4 4 --N-space 100 100 -m space --N-ori 12 --N-osi 7 --normalize --dh 10000 --tau-i 0.25 --maxiter 1000 -o paper/figures/2c.pdf` |
 | 2D | `python paper/contourplot_space.py r0 -y 0 15 --rho 0.72 --w00 5 -l -1 1 -n 9 --shade 0.443 0.691 -o paper/figures/2d.pdf` |
 | 2E | `python paper/contourplot_space.py rmin -y 0 15 --rho 0.72 --w00 5 -s linear -l 0 2 -n 9 --shade 0.260 0.530 -o paper/figures/2e.pdf` |
-| 2F | `python paper/contourplot_space.py r1 -y 0 15 --rho 0.72 --w00 5 -l 0 1.5 -n 7 -o paper/figures/2f.pdf` |
-| 2F alt | `python paper/contourplot_space.py dr1dw11 -y 0 15 --rho 0.72 --w00 5 -s halflog -l -1.25 2 -n 14 -t 0.5 -o paper/figures/2f_alt.pdf` |
+| 2F | `python paper/contourplot_space.py dr1dw11 -y 0 15 --rho 0.72 --w00 5 -s halflog -l -1.25 2 -n 14 -t 0.5 -o paper/figures/2f.pdf` |
 | 2G | `python paper/contourplot_space.py decay -x -5 2.5 --rho 0.72 -o paper/figures/2g.pdf` |
 | 3A | `python paper/contourplot_space.py EI -y 0 15 --rho 0.72 -o paper/figures/3a.pdf` |
 | 3B | `python paper/contourplot_space.py rEI -y 0 15 --rho 0.72 --w00 5 -l -0.5 1.25 -s halflog -n 8 -t 2 -o paper/figures/3b.pdf` |
@@ -27,8 +26,7 @@
 | 6 | See `paper/model_fits/no_disorder/README.md` |
 | S1 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py r0 -y 0 15 --rho $RHO --w00 $WEE -l -1.75 1 -n 12 --shade 0.443 0.691 -N 200 -o paper/figures/supp/S1/rho$RHO-wee$WEE.pdf; done; done` |
 | S2 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py rmin -y 0 15 --rho $RHO --w00 $WEE -s linear -l 0 2 -n 9 --shade 0.260 0.530 -N 200 -o paper/figures/supp/S2/rho$RHO-wee$WEE.pdf; done; done` |
-| S2 alt | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py dr1dw11 -y 0 15 --rho $RHO --w00 $WEE -s halflog -l -1.25 2 -n 14 -t 0.05 -N 200 -o paper/figures/supp/S2_alt/rho$RHO-wee$WEE.pdf; done; done` |
-| S3 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py r1 -y 0 15 --rho $RHO --w00 $WEE -l 0 1.5 -n 7 -N 200 -o paper/figures/supp/S3/rho$RHO-wee$WEE.pdf; done; done` |
+| S3 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py dr1dw11 -y 0 15 --rho $RHO --w00 $WEE -s halflog -l -4 2 -n 25 -t 0.001 -N 200 -o paper/figures/supp/S3/rho$RHO-wee$WEE.pdf; done; done` |
 | S4 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py rEI -y 0 15 --rho $RHO --w00 $WEE -l -1 1 -s symlog -n 5 -t 0.2 -N 200 -o paper/figures/supp/S4/rho$RHO-wee$WEE.pdf; done; done` |
 | S5 | `for RHO in 0.8 1 1.25; do for WEE in 1 2.5 5; do python paper/contourplot_space.py dr0dg -y 0 15 --rho $RHO --w00 $WEE -l -1 1 -n 11 -s symlog -N 200 -o paper/figures/supp/S5/rho$RHO-wee$WEE.pdf; done; done` |
 | S6 | See `paper/model_fits/no_disorder/README.md` |
@@ -40,6 +38,9 @@
 | S8A (left) | `python paper/plot_gain.py -b 0.5 -s 968 -y 1.55 -o paper/figures/supp/S8_a.pdf` |
 | S8B (left) | `python paper/plot_gain.py -b 0.5 -k 0.5 -y 1.55 -o paper/figures/supp/S8_b.pdf` |
 | S8C (left) | `python paper/plot_gain.py -b 0.5 -s 968 -k 0.5 -y 1.55 -o paper/figures/supp/S8_c.pdf` |
+| S8A alt (left) | `python paper/plot_gain.py -b 0.75 -s 968 -y 1.3 -o paper/figures/supp/S8_a_alt.pdf` |
+| S8B alt (left) | `python paper/plot_gain.py -b 0.75 -k 0.5 -y 1.3 -o paper/figures/supp/S8_b_alt.pdf` |
+| S8C alt (left) | `python paper/plot_gain.py -b 0.75 -s 968 -k 0.5 -y 1.3 -o paper/figures/supp/S8_c_alt.pdf` |
 | S8A-C (center, right), S8D | See `paper/model_fits/no_disorder/README.md` |
 
 # Additional commands
