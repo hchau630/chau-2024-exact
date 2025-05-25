@@ -1,5 +1,16 @@
+# some data to exclude (not used in paper)
+paper/oldenburg_data
+
 # don't include some slurm log files that I have
 paper/model_fits/slurm
+
+# temporary
+paper/model_fits/disordered/fits
+paper/model_fits/disordered/runs
+paper/model_fits/disordered/figures
+paper/model_fits/no_disorder/fits
+paper/model_fits/no_disorder/runs
+paper/model_fits/no_disorder/figures
 
 # macOS
 .DS_Store
