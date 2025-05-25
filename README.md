@@ -3,9 +3,10 @@
 
 # Source code for the preprint [Chau et al. 2024](https://doi.org/10.1101/2024.12.27.630558)
 ## Setup
-1) Git clone/fork the repository
+0) (Optional) Git fork the repository
+1) Git clone the repository/the fork
 2) (Recommended) Create and activate conda envrionment with python 3.11
-3) In this directory, run `pip install -r requirements.txt`
+3) In the root directory of the cloned repository, run `pip install -r requirements.txt`
 
 ## Directories
 - `paper`: source code and instructions for reproducing paper figures
