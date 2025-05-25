@@ -1,20 +1,122 @@
-import contextlib
+import math
 from numbers import Number
 from collections.abc import Callable
 from typing import Concatenate
-import logging
 
 import torch
 from torch import Tensor
+from torch.autograd.function import FunctionCtx
 
-from .core import yukawa, kd, scaled_kd, irkd
+from .core import k0, kd, scaled_kd, irkd
 from niarb.linalg import is_diagonal
 from niarb.utils import take_along_dims
 
-logger = logging.getLogger(__name__)
 
-# tensor dtypes supported by various torch.linalg operations such as inv and eig
-LINALG_DTYPES = {torch.float, torch.cfloat, torch.double, torch.cdouble}
+twopi = 2 * torch.pi
+sqrthalfpi = math.sqrt(torch.pi / 2)
+
+
+def _laplace_r_forward(d: int, s: Tensor, r: Tensor) -> Tensor:
+    r"""Forward computation of (2\pi)^(d/2) * laplace_r without sigularity handling."""
+    if d == 1:
+        return sqrthalfpi * torch.exp(-s * r) / s
+    if d == 2:
+        return k0(s * r)
+    if d == 3:
+        return sqrthalfpi * torch.exp(-s * r) / r
+    if d % 2 == 0:
+        return (s / r) ** int(d / 2 - 1) * kd(d, s * r)
+    return s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
+
+
+class LaplaceRNeg(torch.autograd.Function):
+    r"""Autograd function for (2\pi)^(d/2) * laplace_r for d <= 0."""
+
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(d: int, s: Tensor, r: Tensor) -> Tensor:
+        out = _laplace_r_forward(d, s, r)
+
+        # (2\pi)^(d/2) lim_{r -> 0^+} G_d(r; l) for d <= 1. Calculated by Mathematica.
+        limit = math.gamma(1 - d / 2) * s ** (d - 2) / 2 ** (d / 2) if d <= 1 else 0
+        return torch.where(r != 0, out, limit)
+
+    @staticmethod
+    def setup_context(ctx: FunctionCtx, inputs: tuple[int, Tensor, Tensor], _: Tensor):
+        d, s, r = inputs
+        ctx.d = d
+        ctx.dtype_s = s.dtype
+        ctx.dtype_r = r.dtype
+
+        if ctx.needs_input_grad[1] or ctx.needs_input_grad[2]:
+            ctx.save_for_backward(s, r)
+        ctx.set_materialize_grads(False)
+
+    @staticmethod
+    def backward(ctx: FunctionCtx, grad: Tensor | None) -> tuple[None, Tensor, Tensor]:
+        out = [None, None, None]
+        if grad is None:
+            return tuple(out)
+
+        d = ctx.d
+        s, r = ctx.saved_tensors
+
+        if ctx.needs_input_grad[1]:
+            out[1] = (-s * LaplaceRNeg.apply(d - 2, s, r)).conj() * grad
+            out[1] = out[1].to(ctx.dtype_s)
+        if ctx.needs_input_grad[2]:
+            out[2] = (-r * LaplaceRNeg.apply(d + 2, s, r)).conj() * grad
+            out[2] = out[2].to(ctx.dtype_r)
+        return tuple(out)
+
+
+class LaplaceRPos(torch.autograd.Function):
+    r"""Autograd function for (2\pi)^(d/2) * laplace_r for d >= 2."""
+
+    generate_vmap_rule = True
+
+    @staticmethod
+    def forward(d: int, s: Tensor, r: Tensor, singularity: Tensor | Number) -> Tensor:
+        out = _laplace_r_forward(d, s, r)
+        return torch.where(r != 0, out, singularity)
+
+    @staticmethod
+    def setup_context(
+        ctx: FunctionCtx, inputs: tuple[int, Tensor, Tensor, Tensor | Number], _: Tensor
+    ):
+        d, s, r, _ = inputs
+        ctx.d = d
+        ctx.dtype_s = s.dtype
+        ctx.dtype_r = r.dtype
+
+        if ctx.needs_input_grad[1] or ctx.needs_input_grad[2]:
+            ctx.save_for_backward(s, r)
+        if ctx.needs_input_grad[3]:
+            raise NotImplementedError(
+                "Backpropagation with respect to singularity is not implemented."
+            )
+        ctx.set_materialize_grads(False)
+
+    @staticmethod
+    def backward(
+        ctx: FunctionCtx, grad: Tensor | None
+    ) -> tuple[None, Tensor, Tensor, None]:
+        out = [None, None, None, None]
+        if grad is None:
+            return tuple(out)
+
+        d = ctx.d
+        s, r = ctx.saved_tensors
+
+        if ctx.needs_input_grad[1]:
+            out[1] = (-s * LaplaceRPos.apply(d - 2, s, r, 0)).conj() * grad
+            out[1] = out[1].to(ctx.dtype_s)
+        if ctx.needs_input_grad[2]:
+            out[2] = (-r * LaplaceRPos.apply(d + 2, s, r, 0)).conj() * grad
+            out[2] = out[2].to(ctx.dtype_r)
+        return tuple(out)
+
 
 # @profile
 def laplace_r(
@@ -22,6 +124,7 @@ def laplace_r(
     l: Number | Tensor,
     r: Tensor,
     dr: float | Tensor = 0.0,
+    is_sqrt: bool = False,
     validate_args: bool = True,
 ) -> Tensor:
     r"""Radial component of the kernel of the resolvent of the Laplacian.
@@ -29,7 +132,7 @@ def laplace_r(
     Radial component of the kernel of the resolvent of the
     laplace operator in d dimensions, i.e.
     $\bra{x}(l - \nabla^2)^{-1}\ket{y} = laplace(d, l, ||x - y||)$
-    but with the modification that the output is 0 when d > 1 and r == 0,
+    but with the modification that the output is finite when d > 1 and r == 0,
     due to the fact that the resolvent diverges when d > 1 and r == 0.
     Explicitly, the equation is given by
     $1 / (2\pi)^{d/2} (\sqrt{l} / r)^{d/2 - 1} K_{d/2 - 1}(\sqrt{l}r)$
@@ -37,14 +140,15 @@ def laplace_r(
     $\lambda \in \mathbb{C} \ (-\infty, 0]$, but here we will just plug in negative
     $\lambda$ into the above expression directly.
 
-    Backpropagation is not supported for (d % 2 == 0 and d > 4) or (d in {2, 4}
-    and (l.is_complex() or (l < 0).any()).
-
     Args:
         d: Dimension of the space.
         l: Parameter $\lambda$.
         r: Tensor of distances, must be non-negative and real.
-        dr (optional): Small positive number to avoid singularity at r = 0.
+        dr (optional): Small non-negative number to avoid singularity at r = 0. Must be
+            0.0 if d <= 1, as there is no singularity in these cases.
+        is_sqrt (optional): Whether l is already the square root of the parameter.
+            Useful when using laplace_r inside vmap, as it avoids a .item() call
+            when l is a Tensor.
         validate_args (optional): Whether to validate the arguments.
 
     Returns:
@@ -52,8 +156,8 @@ def laplace_r(
 
     """
     if validate_args:
-        if not isinstance(d, int) or d <= 0:
-            raise ValueError(f"d must be a positive integer, but {d=}.")
+        if not isinstance(d, int):
+            raise ValueError(f"d must be an integer, but {d=}.")
 
         if r.is_complex():
             raise TypeError(f"r must be real, but {r.dtype=}.")
@@ -66,58 +170,34 @@ def laplace_r(
         if not (r >= 0).all():
             raise ValueError(f"r must be non-negative, but {r.min()=}.")
 
-    if isinstance(l, torch.Tensor) and not l.is_complex() and (l < 0).any():
+        if d <= 1 and not (isinstance(dr, float) and dr == 0.0):
+            raise ValueError(f"dr must be 0.0 when d <= 1, but {dr=}.")
+
+    if is_sqrt:
+        s = l
+    elif isinstance(l, torch.Tensor) and not l.is_complex() and (l < 0).any():
         # cast real tensors with negative elements to corresponding complex dtype
         # so that the square root operation does not result in NaNs.
-        dtypes = {
-            torch.float16: torch.complex32,
-            torch.float32: torch.complex64,
-            torch.float64: torch.complex128,
-        }
-        l = l.to(dtypes[l.dtype])
-
-    s = l**0.5
+        s = l.to(l.dtype.to_complex()) ** 0.5
+    else:
+        s = l**0.5
 
     if d == 1:
-        # need to treat the 1D case separately since the limit at r = 0 is finite,
-        # but the more general approach below will lead to torch.nan at r = 0.
-        # the 1D case equation is 1 / (2 \sqrt{\lambda}) e^{-\sqrt{\lambda}r)
+        # 1D case needs to be handled separately
         return 1 / (2 * s) * torch.exp(-s * r)
 
+    s = torch.as_tensor(s).to(r.device)
+    prefactor = twopi ** (-d / 2)
+
+    if d <= 0:
+        return prefactor * LaplaceRNeg.apply(d, s, r)
+
+    singularity = 0.0
     if not isinstance(dr, float) or dr != 0.0:
         dr = torch.as_tensor(dr)
-        singularity = d * irkd(d, s * dr) / (dr**d * l)
-    else:
-        singularity = 0.0
+        singularity = d * irkd(d, s * dr) / (dr**d * s**2)
 
-    if d == 3:
-        # faster computation for 3D case
-        singularity = (2 / torch.pi) ** 0.5 * singularity
-        return 1 / (4 * torch.pi) * yukawa(torch.as_tensor(s), r, singularity)
-
-    # all the masking is needed in lieu of torch.where due to NaN gradients for
-    # r = 0 entries, see https://github.com/pytorch/pytorch/issues/68425
-    # for an explanation of the issue of NaN gradient propagation in pytorch
-    if isinstance(s, torch.Tensor):
-        s, r = torch.broadcast_tensors(s, r)
-    out = singularity * torch.ones(
-        r.shape, dtype=torch.result_type(s, r), device=r.device
-    )
-    mask = r != 0
-    r = r[mask]  # Bessel function diverges at r = 0 for d > 1.
-    if isinstance(s, torch.Tensor):
-        s = s[mask]
-
-    # kd is faster for even dimensions and scaled_kd is faster for odd dimensions
-    if d == 2:
-        # fast path for d == 2
-        out[mask] = kd(d, s * r)
-    elif d % 2 == 0:
-        out[mask] = (s / r) ** int(d / 2 - 1) * kd(d, s * r)
-    else:
-        out[mask] = s ** int((d - 3) / 2) * r ** int((1 - d) / 2) * scaled_kd(d, s * r)
-
-    return (2 * torch.pi) ** (-d / 2) * out
+    return prefactor * LaplaceRPos.apply(d, s, r, singularity)
 
 
 def laplace(l: Number | Tensor, r: Tensor, **kwargs) -> Tensor:
@@ -175,12 +255,6 @@ def mixture(
     """
     m = S.shape[-1]
 
-    dtype = None
-    if any(isinstance(t, Tensor) and t.dtype not in LINALG_DTYPES for t in [S, U, V, l]):
-        dtype = _result_type(S, U, V, l)
-        new_dtype = dtype if dtype in LINALG_DTYPES else torch.float
-        S, U, V = S.to(new_dtype), U.to(new_dtype), V.to(new_dtype)
-
     Sinv = torch.linalg.inv(S)  # (*S, m, m)
     if (
         (isinstance(l, Number) and l == 0) or (isinstance(l, Tensor) and (l == 0).all())
@@ -198,9 +272,6 @@ def mixture(
     # conjugate symmetry in diagonalization of real matrices
     if L.isreal().all():
         L, PinvV, UP = L.real, PinvV.real, UP.real
-
-    if dtype:
-        L, PinvV, UP = L.to(dtype), PinvV.to(dtype), UP.to(dtype)
 
     if (flag := is_diagonal(UP)) or is_diagonal(PinvV):
         # faster path for special case where either UP or PinvV is diagonal
@@ -225,15 +296,3 @@ def mixture(
         out = sum(UP[..., i] * PinvV[..., i] * out[i] for i in range(m))  # SUVlija
         # out = sum(UP[..., i] * PinvV[..., i] * R(L[..., i], *args) for i in range(m))  # SUVlija
     return out
-
-
-def _result_type(*tensors):
-    if len(tensors) < 2:
-        raise RuntimeError()
-
-    dtype = torch.result_type(*tensors[:2])
-    for t in tensors[2:]:
-        dtype = torch.result_type(t, torch.empty((), dtype=dtype))
-
-    return dtype
-

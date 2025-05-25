@@ -1,4 +1,5 @@
 import contextlib
+from functools import partial
 
 import pytest
 import torch
@@ -178,6 +179,60 @@ def test_compute_gain_gradient(f, vf):
     f = eval(f)
     vf.requires_grad = True
     torch.autograd.gradcheck(f, vf.double())
+
+
+@pytest.mark.parametrize(
+    "f, vf, n, expected",
+    [
+        ("nn.Rectified() ** 2", -0.5, 1, 0.0),
+        ("nn.Rectified() ** 2", [0.75], 1, [1.5]),
+        ("nn.Rectified() ** 2", [[-0.5, 0.75]], 1, [[0.0, 1.5]]),
+        ("nn.Rectified() ** 2", -0.5, 2, 0.0),
+        ("nn.Rectified() ** 2", [0.75], 2, [2.0]),
+        ("nn.Rectified() ** 2", [[-0.5, 0.75]], 2, [[0.0, 2.0]]),
+        ("nn.Rectified() ** 3", -0.5, 2, 0.0),
+        ("nn.Rectified() ** 3", [0.75], 2, [4.5]),
+        ("nn.Rectified() ** 3", [[-0.5, 0.75]], 2, [[0.0, 4.5]]),
+    ],
+)
+@pytest.mark.parametrize("device", pytest.devices)
+def test_nth_deriv(f, vf, n, expected, device):
+    vf = torch.tensor(vf, device=device)
+    expected = torch.tensor(expected, device=device)
+    f = eval(f)
+    out = numerics.compute_nth_deriv(f, vf, n=n)
+    torch.testing.assert_close(out, expected)
+
+
+@pytest.mark.parametrize(
+    "f, vf, n",
+    [
+        ("nn.Rectified() ** 2", -0.5, 1),
+        ("nn.Rectified() ** 2", [0.75], 1),
+        ("nn.Rectified() ** 2", [[-0.5, 0.75]], 1),
+        ("nn.Rectified() ** 2", -0.5, 2),
+        ("nn.Rectified() ** 2", [0.75], 2),
+        ("nn.Rectified() ** 2", [[-0.5, 0.75]], 2),
+        ("nn.Rectified() ** 3", -0.5, 2),
+        ("nn.Rectified() ** 3", [0.75], 2),
+        ("nn.Rectified() ** 3", [[-0.5, 0.75]], 2),
+    ],
+)
+@pytest.mark.parametrize(
+    "device", pytest.non_mps_devices
+)  # MPS does not support float64
+def test_nth_deriv_gradient(f, vf, n, device):
+    vf = torch.tensor(vf, dtype=torch.double, requires_grad=True, device=device)
+    f = eval(f)
+    torch.autograd.gradcheck(partial(numerics.compute_nth_deriv, f, n=n), vf)
+
+
+@pytest.mark.parametrize("n", [1, 2])
+def test_nth_deriv_inference_mode(n):
+    vf = torch.tensor(0.75, requires_grad=True)
+    f = nn.Rectified() ** 2
+    with torch.inference_mode():
+        numerics.compute_nth_deriv(f, vf + 1.0, n=n)
 
 
 @pytest.mark.parametrize(

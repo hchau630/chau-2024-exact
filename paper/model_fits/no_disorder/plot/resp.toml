@@ -1,0 +1,84 @@
+keep_dataframe_idx = false
+tag_names = ["kind", "loss"]
+
+[dataframes]
+__ignore__ = ["path"]
+
+[dataframes.__matrix__]
+kind = ["model", "data"]
+path = { __call__ = ["niarb.io", "iterdir"], path = { __format__ = "runs/resps_gain-1" }, pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+
+[[dataframes.__include__]]
+kind = "model"
+func = ["niarb.io", "load_data"]
+paths = { __eval__ = "path" }
+query = "distance > 25"
+columns = ["loss", "kind", "dr", "cell_type", "distance", "rel_ori"]
+
+[[dataframes.__include__]]
+kind = "data"
+func = ["niarb.viz", "sample_df"]
+df = { __call__ = ["pandas", "concat", { __call__ = ["niarb.io", "load_data"], paths = ["data/space.pkl", "data/ori.pkl"], uncuts = ["distance", "rel_ori"] }] }
+y = "dr"
+yerr = "dr_se"
+index = "index"
+errorbar = "sd"
+
+[plots]
+__ignore__ = ["axes"]
+
+[plots.__matrix__]
+axes = ["mean", "space", "ori", "space_ori"]
+
+[[plots.__include__]]
+name = { __eval__ = "f'resp_{axes}'" }
+func = "relplot"
+kind = "line"
+y = "dr"
+style_order = ["model", "data"]
+grid = "yzero"
+height = 1.75
+aspect = 1.25
+color = "black"
+legend_loc = "upper right"
+legend_title = false
+facet_kws = { sharey = false, legend_out = false }
+errordim = ["loss", "index"]
+errorbar = "sd"
+err_kws = { linewidth = 0.5 }
+
+[plots.__include__.mapping]
+dr = '$\Delta$ response'
+distance = 'Distance ($\mu$m)'
+rel_ori = '$\Delta$ ori. pref. (deg)'
+cell_type = "Cell type"
+
+[[plots.__include__]]
+axes = "mean"
+query = "kind == 'model'"
+x = "cell_type"
+
+[[plots.__include__]]
+axes = "space"
+rolling = { distance = ["kind == 'model'", { __array__ = "33.7:642.1:40j" }, 60.0] }
+x = "distance"
+style = "kind"
+
+[[plots.__include__]]
+axes = "ori"
+rolling = { rel_ori = ["kind == 'model'", { __array__ = "0:90:10j" }, 25.0] }
+x = "rel_ori"
+style = "kind"
+
+[[plots.__include__]]
+axes = "space_ori"
+query = "kind == 'model'"
+cuts = { rel_ori = [0, 22.5, 67.5, 90] }
+rolling = { distance = [{ __array__ = "33.7:642.1:40j" }, 60.0] }
+x = "distance"
+hue = "rel_ori"
+palette = ["#AA2B6C", "#813D83", "#4A489E"]
+

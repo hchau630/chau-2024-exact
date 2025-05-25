@@ -202,6 +202,7 @@ def load_data(
 def load_data(
     paths: str | Path | Iterable[str | Path],
     query: str = "",
+    uncuts: str | Sequence[str] | None = None,
     y: str = "dr",
     yerr: str = "dr_se",
 ) -> DataFrame | list[DataFrame]:
@@ -222,6 +223,11 @@ def load_data(
 
         if query:
             df = df.query(query)
+
+        if uncuts:
+            for k in uncuts:
+                if k in df.columns and utils.is_interval_dtype(df[k].dtype):
+                    df[k] = utils.get_interval_mid(df[k])
 
         data[i] = df
 

@@ -3,13 +3,16 @@ import functools
 import importlib
 import inspect
 import math
+from numbers import Number
 from collections.abc import Sequence, Callable
+from itertools import accumulate
 
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.axes import Axes
 from matplotlib.text import Text
+from matplotlib.legend import Legend
 from matplotlib.offsetbox import AnchoredText
 import pandas as pd
 from pandas import DataFrame
@@ -18,14 +21,9 @@ import seaborn as sns
 from seaborn import FacetGrid
 import statsmodels.api as sm
 
+from niarb import utils
+
 logger = logging.getLogger(__name__)
-
-
-def _is_interval_dtype(dtype):
-    return isinstance(dtype, pd.IntervalDtype) or (
-        isinstance(dtype, pd.CategoricalDtype)
-        and isinstance(dtype.categories, pd.IntervalIndex)
-    )
 
 
 def mapped(func, mapping):
@@ -59,6 +57,7 @@ def figplot(
     legend_kwargs: dict | None = None,
     xscale: str = "linear",
     yscale: str = "linear",
+    refline: dict | None = None,
     **kwargs,
 ) -> FacetGrid:
     if mapping is None:
@@ -90,7 +89,11 @@ def figplot(
             errordim = [errordim]
 
         estimator = kwargs.get("estimator", "mean")
-        by = [v for k, v in kwargs.items() if k in {"x", "hue", "col", "row", "style"}]
+        by = [
+            v
+            for k, v in kwargs.items()
+            if k in {"x", "hue", "col", "row", "style"} and v is not None
+        ]
         logger.debug(f"{by=}, {errordim=}, {estimator=}")
 
         data = data.groupby(
@@ -99,15 +102,12 @@ def figplot(
 
     logger.debug(f"data:\n{data}")
 
-    g = mapped(func, mapping)(data, **kwargs)
+    g = mapped(func, mapping)(data, stat=stat, **kwargs)
     if stat:
-        if "x" not in kwargs or "y" not in kwargs:
-            raise ValueError("stat=True requires 'x' and 'y' to be specified.")
-
-        statplot = {sns.catplot: catstatplot, lmplot: lmstatplot}.get(func)
-        if statplot is None:
-            raise ValueError(f"stat=True is not supported for {func}.")
-        g.map_dataframe(statplot, x=kwargs["x"], y=kwargs["y"], **(stat_kws or {}))
+        func = lmstatplot if func == lmplot else statplot
+        func = mapped(func, mapping)
+        stat_kws = {k: kwargs.get(k) for k in {"x", "y", "hue"}} | (stat_kws or {})
+        g.map_dataframe(func, **stat_kws)
 
     # more compact subplot titles
     if isinstance(g, sns.FacetGrid):
@@ -132,21 +132,21 @@ def figplot(
         color, linewidth = rcParams["grid.color"], rcParams["grid.linewidth"]
         for ax in g.axes.flat:
             if grid in ["yzero", "xyzero"]:
-                ymin, ymax = ax.get_ylim()
-                if ymin < 0 < ymax:  # only add line if 0 is within the limits
-                    ax.axhline(0, color=color, linewidth=linewidth)
-            elif grid in ["xzero", "xyzero"]:
-                xmin, xmax = ax.get_xlim()
-                if xmin < 0 < xmax:  # only add line if 0 is within the limits
-                    ax.axvline(0, color=color, linewidth=linewidth)
-            else:
+                ax.axhline(0, color=color, linewidth=linewidth)
+            if grid in ["xzero", "xyzero"]:
+                ax.axvline(0, color=color, linewidth=linewidth)
+            if grid not in ["xzero", "yzero", "xyzero"]:
                 ax.grid(axis=grid)
 
-    # move legend
-    if legend_loc is not None:
-        sns.move_legend(g, legend_loc, **(legend_kwargs or {}))
-    if not legend_title:
-        g.legend.set_title(None)
+    if refline is not None:
+        g.refline(**refline)
+
+    # format legend
+    if g.legend:
+        if legend_loc is not None:
+            sns.move_legend(g, legend_loc, **(legend_kwargs or {}))
+        if not legend_title:
+            g.legend.set_title(None)
 
     # call tight_layout
     if tight_layout:
@@ -155,18 +155,45 @@ def figplot(
     return g
 
 
-def relplot(data=None, *, x=None, **kwargs):
-    if _is_interval_dtype(data[x].dtype):
+def relplot(data=None, *, x=None, y=None, stat=False, **kwargs):
+    if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
-        data[x] = pd.IntervalIndex(data[x]).mid
+        data[x] = utils.get_interval_mid(data[x])
+    logger.debug(f"data:\n{data}")
+    logger.debug(f"data memory usage:\n{data.memory_usage()}")
 
-    return sns.relplot(data=data, x=x, **kwargs)
+    # for some reason seaborn is very memory-inefficient, so manually do groupby
+    # if errorbar is "se", "sd", or None. This is important for plotting large
+    # dataframes such as when plotting weights. Also avoid doing this if
+    # stat is True, since we need to pass the raw data to statplot.
+    if "errorbar" in kwargs and stat is False and any(
+        kwargs["errorbar"] == k for k in {"se", "sd", None}
+    ):
+        errorbar = kwargs["errorbar"]
+        by = [x] + [
+            v
+            for k, v in kwargs.items()
+            if k in {"x", "hue", "col", "row", "style"} and v is not None
+        ]
+        agg = {y: "mean"}
+        if errorbar == "se":
+            agg[f"{y}_{errorbar}"] = "sem"
+        elif errorbar == "sd":
+            agg[f"{y}_{errorbar}"] = "std"
+        data = data.groupby(by, observed=True, as_index=False)[y].agg(**agg)
+        if errorbar:
+            data = sample_df(data, errorbar=errorbar, y=y, yerr=f"{y}_{errorbar}")
+    logger.debug(f"grouped data:\n{data}")
+
+    return sns.relplot(data=data, x=x, y=y, **kwargs)
 
 
 def lmplot(data=None, *, x=None, **kwargs):
-    if _is_interval_dtype(data[x].dtype):
+    if utils.is_interval_dtype(data[x].dtype):
         data = data.copy()
-        data[x] = pd.IntervalIndex(data[x]).mid
+        data[x] = utils.get_interval_mid(data[x])
+    logger.debug(f"data:\n{data}")
+    logger.debug(f"data memory usage:\n{data.memory_usage()}")
 
     return sns.lmplot(data=data, x=x, **kwargs)
 
@@ -233,21 +260,32 @@ def histplot(data=None, *, x=None, color=None, label=None, bins="auto", **kwargs
     return sns.histplot(data, x=x, color=color, label=label, bins=bins, **kwargs)
 
 
-def catstatplot(
+def statplot(
     data: DataFrame | None = None,
     *,
     x: str | None = None,
     y: str | None = None,
-    kind: str = "ind",
-    test: Callable | str = "ttest_ind",
+    hue: str | None = None,
+    kind: str = "nsamp",
+    test: Callable | str | None = None,
     test_kws: dict | None = None,
     alphas: Sequence[float] = (0.05, 0.01, 0.001),
     ax: Axes | None = None,
     ha: str = "center",
+    va: str = "center",
     **kwargs,
 ) -> Text:
-    if kind not in {"ind", "1samp"}:
-        raise ValueError(f"'kind' must be either 'ind' or '1samp', but got {kind}.")
+    if x is None or y is None:
+        raise ValueError("x and y cannot be None.")
+
+    if kind not in {"nsamp", "1samp"}:
+        raise ValueError(f"'kind' must be either 'nsamp' or '1samp', but got {kind=}.")
+
+    if kind == "1samp" and hue is not None:
+        raise ValueError(f"'hue' is not supported for '1samp' tests, but got {hue=}.")
+
+    if test is None:
+        test = {"nsamp": "f_oneway", "1samp": "ttest_1samp"}[kind]
 
     if test_kws is None:
         test_kws = {}
@@ -255,30 +293,44 @@ def catstatplot(
     if isinstance(test, str):
         test = getattr(stats, test)
 
-    xs, samples = zip(*data.groupby(x)[y])
+    if utils.is_interval_dtype(data[x].dtype):
+        data = data.copy()
+        data[x] = utils.get_interval_mid(data[x])
+
+    logger.debug(f"data:\n{data}")
+    xs, dfs = zip(*data.groupby(x, observed=True))
     logger.debug(f"xs:\n{xs}")
-    logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
     try:
-        if kind == "ind":
-            pvalues = [test(*samples, **test_kws).pvalue]
+        if hue is not None:
+            pvalues = []
+            for _x, df in zip(xs, dfs):
+                _, samples = zip(*df.groupby(hue, observed=True)[y])
+                logger.debug("x:%s, samples:\n%s", x, "\n".join(str(s.tolist()) for s in samples))
+                pvalues.append(test(*samples, **test_kws).pvalue.item())
         else:
-            pvalues = [test(s, **test_kws).pvalue for s in samples]
+            samples = [df[y] for df in dfs]
+            logger.debug("samples:\n%s", "\n".join(str(s.tolist()) for s in samples))
+            if kind == "nsamp":
+                pvalues = [test(*samples, **test_kws).pvalue.item()]
+            else:
+                pvalues = [test(s, **test_kws).pvalue.item() for s in samples]
     except ValueError as err:
         logger.error(str(err))
         return
 
-    logger.debug(f"{pvalues=}")
+    if kind == "1samp":
+        logger.info(f"p-value: {pvalues[0]}")
+    else:
+        logger.info(f"p-values: {dict(zip(xs, pvalues, strict=True))}")
 
     texts = []
     for pvalue in pvalues:
-        if pvalue >= alphas[0]:
-            continue
-
         if np.isnan(pvalue):
             logger.warning("p-value is NaN.")
-            continue
-
-        if pvalue >= alphas[1]:
+            text = None
+        elif pvalue >= alphas[0]:
+            text = None
+        elif pvalue >= alphas[1]:
             text = "*"
         elif pvalue >= alphas[2]:
             text = "**"
@@ -286,18 +338,19 @@ def catstatplot(
             text = "***"
         texts.append(text)
 
-    if not pd.api.types.is_numeric_dtype(data[x]):
+    if not all(isinstance(x, Number) for x in xs):
         xs = range(len(xs))
-    ys = (s.mean() for s in samples)
 
-    if kind == "ind":
+    if kind == "1samp":
         xs = [sum(xs) / len(xs)]
-        ys = [max(ys)]
 
     if ax is None:
         ax = plt.gca()
 
-    objs = [ax.text(x, y, text, ha=ha, **kwargs) for x, y, text in zip(xs, ys, texts)]
+    y = ax.get_ylim()[1]
+    it = list(zip(xs, texts, strict=True))
+    logger.debug(str(it))
+    objs = [ax.text(x, y, text, ha=ha, va=va, **kwargs) for x, text in it if text]
     return objs
 
 
@@ -329,11 +382,29 @@ def histogram_bin_edges(min, max, bins):
     return np.linspace(-binwidth * N_neg, binwidth * N_pos, num=bins + 1)
 
 
+def remove_legend_subtitles(ax: Axes, nums: Sequence[int], **kwargs) -> Legend:
+    handles, labels = ax.get_legend_handles_labels()
+    assert len(handles) == len(labels)
+
+    if sum(nums) + len(nums) != len(handles):
+        raise ValueError(
+            f"sum(nums) + len(nums) must equal the number of handles, but "
+            f"{sum(nums) + len(nums)=}, {len(handles)=}."
+        )
+
+    cumnums = {0} | set(accumulate(n + 1 for n in nums))
+    indices = [i for i in range(len(handles)) if i not in cumnums]
+    return ax.legend(
+        [handles[i] for i in indices], [labels[i] for i in indices], **kwargs
+    )
+
+
 def sample_df(
     df: DataFrame,
-    errorbar: str = "se",
+    estimator: str = "mean",
+    errorbar: str | tuple[str, int] = "se",
     y: str = "y",
-    yerr: str = "yerr",
+    yerr: str | tuple[str, str] = "yerr",
     index: str | None = None,
 ) -> DataFrame:
     """Generate 'samples' of dataframe
@@ -343,9 +414,12 @@ def sample_df(
 
     Args:
         df: Dataframe
-        errorbar (optional): {"se", "sd"}. Errorbar type
+        estimator (optional): {"mean", "median"}. Estimator for the target variable.
+        errorbar (optional): {"se", "sd", ("pi", 100)}. Errorbar type. If ("pi", 100),
+          estimator must be "median".
         y (optional): Target variable
-        yerr (optional): Errorbar variable
+        yerr (optional): Errorbar variable. If a tuple, the first element is the
+          lower errorbar and the second element is the upper errorbar.
         index (optional): If not None, create a new column with this name containing
           the indices of the samples.
 
@@ -354,11 +428,30 @@ def sample_df(
 
     """
     df0, df1 = df.copy(), df.copy()
-    scaling = {"se": 3**0.5, "sd": 1}[errorbar]
-    df0[y] = df[y] - df[yerr] * scaling
-    df1[y] = df[y] + df[yerr] * scaling
+    if errorbar in {"se", "sd"}:
+        if not isinstance(yerr, str):
+            raise ValueError(
+                f"yerr must be a string if errorbar is 'se' or 'sd', but {yerr=}."
+            )
+        scaling = {"se": 3**0.5, "sd": 1}[errorbar]
+        df0[y] = df[y] - df[yerr] * scaling
+        df1[y] = df[y] + df[yerr] * scaling
+    else:
+        if not isinstance(yerr, tuple) or len(yerr) != 2:
+            raise ValueError(
+                f"yerr must be a 2-tuple if errorbar == ('pi', 100), but {yerr=}."
+            )
+        if estimator != "median":
+            raise ValueError(
+                "estimator must be 'median' if errorbar == ('pi', 100), but "
+                f"{estimator=}."
+            )
+        df0[y] = df[yerr[0]]
+        df1[y] = df[yerr[1]]
+        yerr = list(yerr)
 
     out = pd.concat(dict(enumerate([df, df0, df1]))).drop(columns=yerr)
+
     if index is not None:
         out = out.reset_index(0, names=index)
 

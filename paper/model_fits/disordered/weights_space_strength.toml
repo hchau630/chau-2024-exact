@@ -1,0 +1,31 @@
+__ref__ = ["run.toml"]
+dataset.neurons = { __ref__ = ["run.toml", "dataset", "neurons"] }
+dataset.model_kwargs = { output = "weight" }
+pipeline.model = { __ref__ = ["run.toml", "pipeline", "model"] }
+
+[pipeline.analysis]
+__call__ = ["niarb.nn", "TensorDataFrameAnalysis"]
+query = "distance > 2.5 and distance < 502.5 and W != 0"
+cuts = { distance = { __array__ = "2.5:502.5:50j" } }
+x = ["distance", "presynaptic_cell_type", "postsynaptic_cell_type"]
+y = ["W"]
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/weights_space_strength/{filename}.feather"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+

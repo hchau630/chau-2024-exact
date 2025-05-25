@@ -2,6 +2,7 @@ import logging
 import importlib
 from pathlib import Path
 from collections.abc import Iterable, Sequence, Callable
+from typing import Literal
 import pprint
 
 import torch
@@ -39,7 +40,10 @@ def run(
     dataframes: Iterable[DataFrame | dict[str]],
     plots: Iterable[dict[str]],
     tag_names: Sequence[str] = (),
+    keep_dataframe_idx: bool = True,
     out: Path | str | None = None,
+    file_type: str = "pdf",
+    dpi: float | Literal["figure"] = "figure",
     progress: bool = False,
     show: bool = False,
 ) -> dict[str, FacetGrid]:
@@ -50,10 +54,16 @@ def run(
             tags = {k: df.pop(k) for k in tag_names}
             df = dataframe(**df, tags=tags)
         logger.debug(f"df{i}:\n{df}")
+        logger.debug(f"df{i} memory usage:\n{df.memory_usage()}")
         dfs.append(df)
 
-    df = pd.concat(dict(enumerate(dfs))).reset_index(0, names="dataframe_idx")
+    if keep_dataframe_idx:
+        df = utils.concat(dict(enumerate(dfs))).reset_index(0, names="dataframe_idx")
+        df = df.reset_index(drop=True)  # get rid of original index to save memory
+    else:
+        df = utils.concat(dfs, ignore_index=True)
     logger.debug(f"df:\n{df}")
+    logger.debug(f"df memory usage:\n{df.memory_usage()}")
 
     logger.info("Plotting results...")
     figs = {}
@@ -64,9 +74,9 @@ def run(
     if out:
         out = Path(out)
         for k, v in figs.items():
-            path = out / f"{k}.pdf"
+            path = out / f"{k}.{file_type}"
             path.parent.mkdir(exist_ok=True, parents=True)
-            v.savefig(path)
+            v.savefig(path, dpi=dpi)
     if show:
         plt.show()
 
@@ -80,6 +90,8 @@ def dataframe(
     evals: dict[str, str] | None = None,
     cuts: dict[str, int | Sequence[int | float]] | None = None,
     rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
     **kwargs,
 ) -> DataFrame:
     if isinstance(func, Sequence):
@@ -97,27 +109,17 @@ def dataframe(
 
     if tags:
         for k, v in tags.items():
-            df[k] = v
+            df[k] = pd.Categorical.from_codes([0] * len(df), categories=(v,))
 
-    if query:
-        df = df.query(query).copy()
-
-    if evals:
-        for k, v in evals.items():
-            df[k] = df.eval(v)
-
-    if rolling and cuts and set(rolling) & set(cuts):
-        raise ValueError("rolling and cuts cannot share keys.")
-
-    if cuts:
-        for k, v in cuts.items():
-            if k in df.columns:
-                df[k] = pd.cut(df[k], bins=v, right=False)
-
-    if rolling:
-        for k, (centers, window) in rolling.items():
-            if k in df.columns:
-                df = utils.rolling(df, k, centers, window)
+    df = process_dataframe(
+        df,
+        evals=evals,
+        query=query,
+        cuts=cuts,
+        rolling=rolling,
+        groupby_cols=groupby_cols,
+        groupby_agg=groupby_agg,
+    )
 
     return df
 
@@ -126,13 +128,25 @@ def plot(
     df: DataFrame,
     name: str = "figure",
     query: str | None = None,
+    evals: dict[str, str] | None = None,
+    cuts: dict[str, int | Sequence[int | float]] | None = None,
+    rolling: dict[str, tuple[Sequence[int | float], int | float]] | None = None,
     groupby: str | Sequence[str] | None = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
     progress: bool = False,
     leave: bool = True,
     **kwargs,
 ) -> dict[str, FacetGrid]:
-    if query:
-        df = df.query(query).copy()
+    df = process_dataframe(
+        df,
+        evals=evals,
+        query=query,
+        cuts=cuts,
+        rolling=rolling,
+        groupby_cols=groupby_cols,
+        groupby_agg=groupby_agg,
+    )
 
     figs = {}
     if groupby:
@@ -147,3 +161,58 @@ def plot(
         figs[name] = viz.figplot(df, **kwargs)
 
     return figs
+
+
+def process_dataframe(
+    df: DataFrame,
+    query: str | None = None,
+    evals: dict[str, str] | None = None,
+    cuts: dict[str, int | Sequence[int | float]] | None = None,
+    rolling: (
+        dict[
+            str,
+            tuple[Sequence[int | float], int | float]
+            | tuple[str, Sequence[int | float], int | float],
+        ]
+        | None
+    ) = None,
+    groupby_cols: str | Sequence[str] | None = None,
+    groupby_agg: dict[str, tuple[str, str]] | None = None,
+) -> DataFrame:
+    if groupby_agg is None:
+        groupby_agg = {}
+
+    if query:
+        df = df.query(query)
+
+    df = df.copy()
+
+    if evals:
+        for k, v in evals.items():
+            df[k] = df.eval(v)
+
+    if rolling and cuts and set(rolling) & set(cuts):
+        raise ValueError("rolling and cuts cannot share keys.")
+
+    if cuts:
+        for k, v in cuts.items():
+            if k in df.columns:
+                df[k] = pd.cut(df[k], bins=v, right=False)
+
+    if rolling:
+        for k, v in rolling.items():
+            if k not in df.columns:
+                continue
+
+            if len(v) == 3:
+                sf = utils.rolling(df.query(v[0]), k, *v[1:])
+                sf[k] = utils.get_interval_mid(sf[k])
+                df = pd.concat([sf, df.query(f"~({v[0]})")], ignore_index=True)
+            else:
+                df = utils.rolling(df, k, *v)
+
+    if groupby_cols:
+        groupby_agg = {k: tuple(v) for k, v in groupby_agg.items()}
+        df = df.groupby(groupby_cols, as_index=False, observed=True).agg(**groupby_agg)
+
+    return df

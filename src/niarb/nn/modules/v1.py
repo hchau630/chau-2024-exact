@@ -21,6 +21,7 @@ from niarb.cell_type import CellType
 from niarb.tensors import categorical
 from niarb.tensors.periodic import PeriodicTensor
 from niarb.tensors.circulant import CirculantTensor
+from niarb.nn.modules.kernels import Kernel, Radial
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ def resolvent(
     kappa: Tensor | float,
     osi_func: Callable[[Tensor], Tensor],
     osi_scale: Tensor | float,
+    kappa_x: float = 0.0,
     autapse: bool = False,
     order: int = 1,
     mode: str = "parallel",
@@ -131,6 +133,8 @@ def resolvent(
         osi_scale:
             Expectation of osi_func ** 2 over some distribution of OSI. If a tensor, shape must be
             broadcastable to (n,).
+        kappa_x (optional): Connectivity is multiplied by 1 + 2 * kappa_x * cos(x["ori"]).
+            Only implemented for the case where x and y do not contain "space" or "osi".
         order (optional): Optional argument passed to functional.wrapped.
         mode (optional): {'parallel', 'sequential'}. Optional argument passed to functional.wrapped.
 
@@ -146,6 +150,9 @@ def resolvent(
     if "osi" in x and "ori" not in x:
         raise ValueError("If 'osi' is present in x, 'ori' must also be present.")
 
+    if kappa_x != 0.0 and ("space" in x or "osi" in x or "ori" not in x or l != -1):
+        raise NotImplementedError("kappa_x is not implemented for this case.")
+
     batch_shape = W.shape[:-2]
 
     if isinstance(osi_scale, float):
@@ -160,6 +167,7 @@ def resolvent(
 
     if "ori" in x:
         W = torch.stack([W, W * kappa], dim=-3)  # (*BW, 2, n, n)
+        sigma = sigma.unsqueeze(-3)  # (*BW, 1, n, n)
         i, j = i[..., None], j[..., None]  # (*Bx, 1), (*By, 1)
 
     if "osi" in x:
@@ -186,8 +194,15 @@ def resolvent(
         func = functional.wrapped(func, order=order, mode=mode)
         out = func(r).real  # (*BWxy, [2])
     else:
-        eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n,)
-        out = W @ torch.linalg.inv(l * W + eye)  # (*BW, [2], n, n)
+        eye = torch.eye(W.shape[-1], device=W.device, dtype=W.dtype)  # (n, n)
+        out = (eye - torch.linalg.inv(l * W + eye)) / l  # (*BW, [2], n, n)
+        if kappa_x != 0.0:
+            # l = -1, out and W has shape (*BW, 2, n, n)
+            L0, L1 = out[..., 0, :, :], out[..., 1, :, :]  # (*BW, n, n)
+            Q = 2 * kappa_x**2 * L1 @ L0  # (*BW, n, n)
+            T = 0.5 * (torch.linalg.inv(eye - 2 * kappa_x**2 * L0 @ L1) - eye)
+            out[..., 0, :, :] = (L0 + eye) @ torch.linalg.inv(eye - Q) - eye
+            out[..., 1, :, :] = L1 + (L1 + eye) @ T
         out = utils.take_along_dims(
             out, i[..., None, None], j[..., None, None]
         )  # (*BWxy, [2])
@@ -335,6 +350,8 @@ class V1(torch.nn.Module):
         osi_func: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
         osi_prob: torch.distributions.Distribution | Sequence = ("Uniform", 0.0, 1.0),
         f: float | Callable[[Tensor], Tensor] | str | Sequence = "Identity",
+        space_x: tuple[float, float] = (1.0, torch.inf),
+        kappa_x: float = 0.0,
         sigma_symmetry: str | Sequence[Sequence[int]] | Tensor | None = None,
         null_connections: Iterable[Sequence[CellType]] | None = None,
         autapse: bool = False,
@@ -353,13 +370,20 @@ class V1(torch.nn.Module):
         init_stable: bool = False,
         mode: str = "analytical",
         approx_order: int = 2,
-        prob_kernel: Callable[[ParameterFrame, ParameterFrame], Tensor] | None = None,
+        space_strength_kernel: str | Kernel | None = None,
+        prob_kernel: dict[str, Kernel] | None = None,
+        monotonic_strength: bool = False,
+        keep_monotonic_norm: bool = False,
+        monotonic_norm_ord: int | float = 1,
+        dense: bool = False,
         N_synapses: float | int = None,
         W_std: float = 0.0,
+        W_max: float = torch.inf,
         seed: int | None = None,
         sparsify_kwargs: dict[str] | None = None,
         nonlinear_kwargs: dict[str] | None = None,
         simulation_kwargs: dict[str] | None = None,
+        monotonic_kwargs: dict[str] | None = None,
         wrapped_kwargs: dict[str] | None = None,
         batch_shape: Sequence[int] = (),
     ):
@@ -381,6 +405,13 @@ class V1(torch.nn.Module):
                 and the rest are the distribution parameters. batch_shape must be either () or (n,).
                 Ignored if "osi" not in variables.
             f (optional): Model nonlinearity. If None, model is linear.
+            space_x (optional): Multiply connectivity by nn.SpaceGain(*space_x, "space").
+                If kappa_x is also provided, then connectivity is multiplied by
+                nn.SpaceOriGain(*space_x, kappa_x, ["space", "ori"]) instead.
+                Note that the response cannot be computed when mode == "analytical" and
+                space_x is not default.
+            kappa_x (optional): Multiply connectivity by 1 + 2 * kappa_x * cos(x["ori"]).
+                See above if space_x is also provided.
             sigma_symmetry (optional): Symmetries in sigma. If a string, must be one of
                 {"pre", "post", "full"}. If tensor-like, must have shape (n, n)
                 consisting of consecutive integers starting from 0. If None, no symmetry
@@ -389,7 +420,8 @@ class V1(torch.nn.Module):
                 Sequence of (cell_type_i, cell_type_j) pairs where the connectivity from
                 cell_type_j to cell_type_i is fixed to zero. If None, defaults to the connectivity
                 specified by the 'targets' field of each cell type in cell_types.
-            autapse (optional): Whether or not to allow autapses.
+            autapse (optional): Whether or not to allow autapses. Ignored if space_strength_kernel is
+                not None.
             sigma_optim (optional): Whether or not to optimize sigma. Defaults to True if "space" in variables.
             kappa_optim (optional): Whether or not to optimize kappa. Defaults to True if "ori" in variables.
             vf_optim (optional): Whether or not to optimize vf. Defaults to True if f is not Identity.
@@ -415,20 +447,37 @@ class V1(torch.nn.Module):
             mode (optional): {'analytical', 'matrix', 'matrix_approx', 'numerical'}.
                 Method for computing the perturbation response.
             approx_order (optional): Order of approximation for matrix_approx mode.
-            prob_kernel (optional): Kernel function for computing connection probabilities. If None,
-                the network is all-to-all connected. Unused if mode == 'analytical'. If not None,
-                N_synapses must be None.
+            wrapped_kwargs (optional): keyword arguments passed to functional.wrapped.
+            batch_shape (optional): Shape of model batch dimensions.
+
+            The remaining options are ignored if `mode` == 'analytical':
+            space_strength_kernel (optional): Kernel function for computing spatial connectivity strength.
+                Assumed to be translationally invariant. If None, this is the Laplace kernel divided by
+                prob_kernel["space"].
+            prob_kernel (optional): Dict of kernel functions for computing connection probabilities.
+                space and ori kernels are assumed to be translationally invariant. Keys must be ones of
+                a subset of {"cell_type"} | set(variables). If "cell_type" is not in variables, use
+                "cell_type" to specify the overall probability amplitude.
+            monotonic_strength (optional): If True, connectivity strength is modified to be
+                monotonically decreasing with distance, and prob_kernel["space"] must be a Radial kernel
+                if provided.
+            keep_monotonic_norm (optional): If True, the monotonic kernel is scaled such that the
+                norm of the product of the monotonic strength kernel and the probability kernel
+                is equal to the norm of the product of the non-monotonic strength kernel and the
+                probability kernel. Ignored if monotonic_strength is False.
+            monotonic_norm_ord (optional): Order of the vector norm used for `keep_monotonic_norm`.
+            dense (optional): If True, connectivity is dense, and `N_synapses` must be None.
             N_synapses (optional):
-                Expected number of synapses per neuron, must be non-negative. If None, connectivity is dense.
-                If not None, prob_kernel must be None.
-            W_std (optional). Standard deviation (as a fraction of the mean) of connection weight distribution.
+                Expected number of synapses per neuron, must be non-negative. If not None, `dense` must be False.
+            W_std (optional): Standard deviation (as a fraction of the mean) of connection weight distribution.
+            W_max (optional): Maximum absolute connection strength.
             seed (optional):
                 Random seed for generating connection weight matrix, only relevant if N_synapses is not None or W_std > 0.
             sparsify_kwargs (optional): keyword arguments passed to weights.sparsify.
             nonlinear_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state_approx.
             simulation_kwargs (optional): keyword arguments passed to numerics.perturbed_steady_state.
-            wrapped_kwargs (optional): keyword arguments passed to functional.wrapped.
-            batch_shape (optional): Shape of model batch dimensions.
+            monotonic_kwargs (optional): keyword arguments passed to nn.Monotonic.
+                Ignored if monotonic_strenght is False.
 
         """
         # validate inputs
@@ -468,10 +517,33 @@ class V1(torch.nn.Module):
         if W_std < 0.0:
             raise ValueError(f"W_std must be non-negative, but got {W_std=}.")
 
-        if prob_kernel is not None and N_synapses is not None:
+        if W_max < 0.0:
+            raise ValueError(f"W_max must be non-negative, but got {W_max=}.")
+
+        if prob_kernel and not set(prob_kernel.keys()).issubset(
+            ["cell_type"] + variables
+        ):
             raise ValueError(
-                "prob_kernel and N_synapses cannot be specified simultaneously."
+                f"prob_kernel keys must be a subset of {'cell_type'} | set(variables), "
+                f"but got {prob_kernel.keys()=}."
             )
+
+        if (
+            monotonic_strength
+            and "space" in prob_kernel
+            and not isinstance(prob_kernel["space"], Radial)
+        ):
+            raise ValueError(
+                "If monotonic_strength is True and prob_kernel['space'] is provided, "
+                "prob_kernel['space'] must be a Radial kernel, but "
+                f"{type(prob_kernel['space'])=}."
+            )
+
+        if dense and N_synapses is not None:
+            raise ValueError("`N_synapses` must be none if `dense` is True.")
+
+        if wrapped_kwargs is not None:
+            raise NotImplementedError("wrapped_kwargs is not currently implemented.")
 
         cell_types = tuple(
             CellType[ct] if isinstance(ct, str) else ct for ct in cell_types
@@ -539,6 +611,12 @@ class V1(torch.nn.Module):
         if vf_optim is None:
             vf_optim = not isinstance(f, nn.Identity)
 
+        if prob_kernel is None:
+            prob_kernel = {}
+
+        if monotonic_kwargs is None:
+            monotonic_kwargs = {}
+
         super().__init__()
 
         self.variables = list(variables)
@@ -546,12 +624,15 @@ class V1(torch.nn.Module):
         self._osi_func = osi_func
         self.osi_prob = osi_prob
         self.f = f
+        self.space_x_ = space_x
+        self.kappa_x_ = kappa_x
         self.autapse = autapse
         self.mode = mode
         self.approx_order = approx_order
-        self.prob_kernel = prob_kernel
         self.N_synapses = N_synapses
+        self.dense = dense
         self.W_std = W_std
+        self.W_max = W_max
         self.seed = seed
         self.sparsify_kwargs = sparsify_kwargs if sparsify_kwargs else {}
         self.nonlinear_kwargs = nonlinear_kwargs if nonlinear_kwargs else {}
@@ -606,6 +687,86 @@ class V1(torch.nn.Module):
             self.register_buffer("sigma_symmetry", sigma_symmetry, persistent=False)
         else:
             self.sigma_symmetry = sigma_symmetry
+
+        # define model kernels
+        if isinstance(space_strength_kernel, str):
+            space_strength_kernel = getattr(nn, space_strength_kernel)
+            assert isinstance(space_strength_kernel, Kernel)
+
+        has_ct = "cell_type" in self.variables
+
+        space_prob_kernel = prob_kernel.get("space", 1)
+        if space_strength_kernel is None:
+            sqrtS = (
+                nn.Matrix(self.sqrtS, "cell_type") if has_ct else nn.Scalar(self.sqrtS)
+            )
+            if autapse:
+                k = nn.AutapsedLaplace(
+                    sqrtS, ["space", "space_dV"], normalize="integral"
+                )
+            else:
+                k = nn.Laplace(sqrtS, "space", normalize="integral")
+            if monotonic_strength:
+                space_strength_kernel = nn.Monotonic(
+                    k / space_prob_kernel, "space", **monotonic_kwargs
+                )
+                if keep_monotonic_norm:
+                    space_strength_kernel = (
+                        space_strength_kernel
+                        * nn.Norm(k, "cell_type", ord=monotonic_norm_ord)
+                        / nn.Norm(
+                            space_strength_kernel * space_prob_kernel,
+                            "cell_type",
+                            ord=monotonic_norm_ord,
+                        )
+                    )
+                space_product_kernel = space_strength_kernel * space_prob_kernel
+            else:
+                space_product_kernel = k
+                space_strength_kernel = space_product_kernel / space_prob_kernel
+        else:
+            space_product_kernel = space_strength_kernel * space_prob_kernel
+
+        # actually I think it's fine to just pass self.kappa instead of self.kappa_
+        # since Tensors are passed by reference
+        kappa_kernel = (
+            nn.Matrix(self.kappa_, "cell_type") if has_ct else nn.Scalar(self.kappa_)
+        )
+        if "osi" in variables:
+            kappa_kernel = kappa_kernel * nn.RankOne(self.osi_func, x_keys="osi")
+
+        product_kernel = {
+            "cell_type": (
+                nn.Matrix(self.W, "cell_type") if has_ct else nn.Scalar(self.W)
+            ),
+            "space": space_product_kernel,
+            "ori": nn.Tuning(kappa_kernel, "ori", normalize=True),
+        }
+        if (
+            "space" in self.variables
+            and "ori" in self.variables
+            and self.space_x != (1.0, torch.inf)
+            and self.kappa_x != 0.0
+        ):
+            product_kernel["space"] *= nn.SpaceOriGain(
+                *self.space_x, self.kappa_x, ["space", "ori"]
+            )
+        elif "space" in self.variables and self.space_x != (1.0, torch.inf):
+            product_kernel["space"] *= nn.SpaceGain(*self.space_x, "space")
+        elif "ori" in self.variables and self.kappa_x != 0.0:
+            product_kernel["ori"] *= nn.Tuning(nn.Scalar(self.kappa_x), "ori", mode="x")
+        strength_kernel = {
+            "cell_type": product_kernel["cell_type"] / prob_kernel.get("cell_type", 1),
+            "space": space_strength_kernel,
+            "ori": product_kernel["ori"] / prob_kernel.get("ori", 1),
+        }
+
+        def filt(x):
+            return x[0] in {"cell_type"} | set(self.variables)
+
+        self.product_kernel = nn.Prod(dict(filter(filt, product_kernel.items())))
+        self.prob_kernel = nn.Prod(dict(filter(filt, prob_kernel.items())))
+        self.strength_kernel = nn.Prod(dict(filter(filt, strength_kernel.items())))
 
         # initialize model parameters
         self.init_gW_std = init_gW_std
@@ -671,6 +832,27 @@ class V1(torch.nn.Module):
             return lambda x: osi_prob.cdf(x) ** self._osi_func
         return self._osi_func
 
+    def kappa_(self) -> Tensor:
+        return self.kappa
+
+    @property
+    def space_x(self) -> tuple[float, float]:
+        return self.space_x_
+
+    @property
+    def kappa_x(self) -> float:
+        return self.kappa_x_
+
+    def W(self, with_gain: bool = False, **kwargs) -> Tensor:
+        W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
+        if not with_gain:
+            W = W / self.gain(**kwargs)[..., None]  # (*batch_shape, n, n)
+        return W
+
+    def sqrtS(self) -> Tensor:
+        batch_shape, n = self.batch_shape, self.n
+        return self.sigma_.broadcast_to(*batch_shape, n, n)
+
     def reset_parameters(self):
         torch.nn.init.constant_(self.vf, self.init_vf)
         nn.init.W_(
@@ -693,6 +875,9 @@ class V1(torch.nn.Module):
 
         """
         f, vf = self.f, self.vf
+        if isinstance(f, nn.Identity):
+            return torch.ones_like(vf)
+
         if isinstance(f, nn.Match):
             f = functools.partial(
                 f.forward,
@@ -711,9 +896,7 @@ class V1(torch.nn.Module):
         with_gain: bool = True,
         **kwargs,
     ) -> Tensor:
-        W = self.gW * self.sign[..., None, :]  # (*batch_shape, n, n)
-        if not with_gain:
-            W = W / self.gain(**kwargs)[..., None]  # (*batch_shape, n, n)
+        W = self.W(with_gain=with_gain, **kwargs)  # (*batch_shape, n, n)
 
         if self.batch_ndim > 0:
             idx = (slice(None),) * self.batch_ndim + (None,) * x.ndim
@@ -730,6 +913,7 @@ class V1(torch.nn.Module):
             kappa,
             self.osi_func,
             self.osi_scale,
+            kappa_x=self.kappa_x,
             autapse=self.autapse,
             **self.wrapped_kwargs,
         )  # (*self.batch_shape, *broadcast_shapes(x.shape, y.shape))
@@ -821,6 +1005,16 @@ class V1(torch.nn.Module):
             is instead a Tensor of connectivity weights.
 
         """
+        if (
+            output == "response"
+            and self.mode == "analytical"
+            and self.space_x != (1.0, torch.inf)
+        ):
+            raise ValueError(
+                "space_x cannot be specified when output == 'response' and mode == "
+                f"'analytical', but {self.space_x=}."
+            )
+
         if isinstance(to_dataframe, str) and to_dataframe not in {"tdfl", "pandas"}:
             raise ValueError(
                 "to_dataframe must be either 'tdfl', 'pandas', or bool, but got "
@@ -850,7 +1044,14 @@ class V1(torch.nn.Module):
             keys += ["space_dV"]
 
         if check_circulant:
-            cdim = _cdim(x.data[self.variables], ndim, rtol=1.0e-2, atol=1.0e-8)
+            affine_vars = set()
+            if self.space_x == (1.0, torch.inf):
+                affine_vars.add("space")
+            if self.kappa_x == 0.0:
+                affine_vars.add("ori")
+            cdim = _cdim(
+                x.data[self.variables], ndim, affine_vars, rtol=1.0e-2, atol=1.0e-8
+            )
         else:
             cdim = ()
         logger.debug(f"Assuming circulant dimensions are {cdim}, with {x.shape=}")
@@ -931,32 +1132,53 @@ class V1(torch.nn.Module):
                 )
 
             W = self.forward(x, output="weight", ndim=ndim, to_dataframe=False)
+            reshape = ndim > 1 and not isinstance(W, CirculantTensor)
+            if reshape:
+                N_ = math.prod(W.shape[-ndim:])
+                W = W.reshape((*W.shape[: -2 * ndim], N_, N_))
             I = linalg.eye_like(W)  # (*bshape, *, *shape, *shape)
             dh = x.data[in_var]  # (*, *shape)
+            if reshape:
+                dh = dh.reshape((*dh.shape[:-ndim], N_))
+
             if self.mode == "matrix":
-                dr = torch.linalg.solve(I - W, dh)  # (*bshape, *, *shape)
+                dh = dh.unsqueeze(-1)
+                dr = torch.linalg.solve(I - W, dh).squeeze(-1)  # (*bshape, *, *shape)
             else:
                 dr = dh.clone()
                 dri = dh.unsqueeze(-1)
                 for _ in range(self.approx_order):
                     dri = W @ dri
                     dr += dri.squeeze(-1)
+            if reshape:
+                dr = dr.reshape((*dr.shape[:-1], *x.shape[-ndim:]))
 
         else:
-            kernel = functools.partial(self.resolvent, 0, with_gain=False)
-            W = weights.discretize(
-                kernel, x.data[keys], ndim=ndim, dim=cdim
-            )  # (*bshape, *, *shape, *shape)
-
-            if self.prob_kernel is not None:
+            if self.dense or len(self.prob_kernel.funcs) == 0:
+                W = weights.discretize(
+                    self.product_kernel, x.data[keys], ndim=ndim, dim=cdim
+                )  # (*bshape, *, *shape, *shape)
+            else:
                 # Note: this is non-differentiable.
                 prob = weights.discretize(
-                    self.prob_kernel, x.data[keys], ndim=ndim, mul_dV=False
+                    self.prob_kernel, x.data[keys], ndim=ndim, dim=cdim, mul_dV=False
                 )
+                W = weights.discretize(
+                    self.strength_kernel, x.data[keys], ndim=ndim, dim=cdim
+                )  # (*bshape, *, *shape, *shape)
+
+                if isinstance(prob, CirculantTensor):
+                    prob = prob.dense()
                 if isinstance(W, CirculantTensor):
                     W = W.dense()
-                W = W / prob * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
-            elif self.N_synapses is not None:
+
+                if (prob < -1e-5).any() or (prob > 1 + 1e-5).any():
+                    raise ValueError("Connection probability must be in [0, 1].")
+                prob = prob.clip(min=0.0, max=1.0)
+
+                W = W * torch.bernoulli(prob)  # (*bshape, *, *shape, *shape)
+
+            if self.N_synapses is not None:
                 # Note: this is currently non-differentiable.
                 mean_p = self.N_synapses / math.prod(x.shape[-ndim:])
                 with random.set_seed(self.seed):
@@ -970,12 +1192,15 @@ class V1(torch.nn.Module):
                 with random.set_seed(self.seed):
                     W = weights.sample_log_normal(W, self.W_std)
 
+            if self.W_max < torch.inf:
+                W = torch.clip(W, min=-self.W_max, max=self.W_max)
+
             if output == "weight":
                 if not to_dataframe:
                     return W
 
                 dims = [(-ndim, None), (-ndim, None)]
-                x = x.data[self.variables]
+                x = x.data[self.variables + ([mask_var] if mask_var in x else [])]
                 x_post, x_pre = frame.meshgrid(x, x, dims=dims, sparse=True)
 
                 # TODO: Think about how to make this more flexible, allowing for
@@ -988,11 +1213,19 @@ class V1(torch.nn.Module):
                 for k, v in [("space", "distance"), ("ori", "rel_ori")]:
                     if k in self.variables:
                         x[v] = functional.diff(x_post[k], x_pre[k]).norm(dim=-1)
-                x = frame.ParameterFrame(x, ndim=2 * ndim)
+                if mask_var in x_pre:
+                    x[mask_var] = x_post[mask_var] & x_pre[mask_var]
+                x = frame.ParameterFrame(x, ndim=x_pre.ndim)
 
                 if isinstance(W, CirculantTensor):
                     W = W.dense()
                 x = x.datailoc[(None,) * self.batch_ndim] | {"W": W}
+                logger.debug(f"x:\n{x}")
+
+                if mask_var in x:
+                    x = x.iloc[x[mask_var]]
+                    del x[mask_var]
+                logger.debug(f"x:\n{x}")
                 x = x.to_framelike(**framelike_kwargs)
 
                 return x
@@ -1037,13 +1270,13 @@ def _allconst(x, dim, **kwargs):
     return torch.allclose(x.narrow(dim, 0, n - 1), x.narrow(dim, 1, n - 1), **kwargs)
 
 
-def _cdim(x, ndim, **kwargs):
+def _cdim(x, ndim, affine_vars, **kwargs):
     cdim = []
     for dim in range(x.ndim - ndim, x.ndim):
         if all(
             _allconst(v, dim, **kwargs)
             or (
-                (k in {"space", "ori"})
+                (k in affine_vars)
                 and isinstance(v, PeriodicTensor)
                 and _allconst(v.diff(dim=dim), dim, **kwargs)
                 # note: this is currently not exhaustive since it does not check

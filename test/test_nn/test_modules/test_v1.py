@@ -8,6 +8,7 @@ import pytest
 import torch
 from torch.utils.data import DataLoader
 import pandas as pd
+import numpy as np
 import hyclib as lib
 
 from niarb import neurons, special, nn, utils, perturbation, random
@@ -168,7 +169,7 @@ class TestV1:
 
     @pytest.mark.parametrize("d", [1, 2, 3])
     @pytest.mark.parametrize(
-        "variables, osi_func, osi_prob, sigma_symmetry",
+        "variables, osi_func, osi_prob, sigma_symmetry, space_x, kappa_x",
         get_parameters(
             variables=[
                 ["cell_type"],
@@ -188,9 +189,13 @@ class TestV1:
                 ("Beta", [2.0, 1.5], [3.0, 2.5]),
             ],
             sigma_symmetry=[[[0, 1], [1, 0]], "pre", "post", "full", None],
+            space_x=[(1.0, torch.inf), (0.5, 175.0)],
+            kappa_x=[0.0, 0.5],
         ),
     )
-    def test_weights(self, variables, d, osi_func, osi_prob, sigma_symmetry):
+    def test_weights(
+        self, variables, d, osi_func, osi_prob, sigma_symmetry, space_x, kappa_x
+    ):
         model = nn.V1(
             variables,
             cell_types=(CellType.PYR, CellType.PV),
@@ -201,6 +206,8 @@ class TestV1:
                 if "cell_type" in variables
                 else nn.SSN(2)
             ),
+            space_x=space_x,
+            kappa_x=kappa_x,
             sigma_symmetry=sigma_symmetry,
         )
         state_dict = get_state_dict(model.n, sigma_symmetry)
@@ -224,6 +231,8 @@ class TestV1:
             out = model(x, output="weight", ndim=x.ndim, to_dataframe=False)
 
         out = out.dense(keep_shape=False) if isinstance(out, CirculantTensor) else out
+        if out.ndim > 2:
+            out = out.reshape(math.prod(x.shape), -1)
         x = x.reshape(-1)
 
         G = torch.atleast_1d(model.gain()).diag()  # (n, n)
@@ -244,6 +253,7 @@ class TestV1:
             )  # (M, M)
 
         expected = W
+        gain = 1.0
 
         if "space" in variables:
             r = functional.diff(x["space"][:, None], x["space"][None, :])
@@ -253,26 +263,45 @@ class TestV1:
             )
             if d > 1:
                 expected[r == 0] = 0.0
+            if space_x != (1.0, torch.inf):
+                b, s = space_x
+                r = x["space"][:, None].norm(dim=-1)  # (M, 1)
+                gain = b + (1 - b) * torch.exp(-(r**2) / (2 * s**2))
 
         if "ori" in variables:
             theta = functional.diff(x["ori"][:, None], x["ori"][None, :])
             theta = theta.tensor.squeeze(-1) / 90.0 * torch.pi  # (M, M)
             expected = expected * (1 + 2 * kappa * torch.cos(theta)) / N_ori
+            if kappa_x != 0.0:
+                x_theta = x["ori"][:, None].norm(dim=-1) / 90.0 * torch.pi  # (M, 1)
+                gain = 1 + 2 * kappa_x * torch.cos(x_theta)
+
+        if (
+            "space" in variables
+            and "ori" in variables
+            and space_x != (1.0, torch.inf)
+            and kappa_x != 0.0
+        ):
+            gain = b + (1 - b) * torch.exp(-(r**2) / (2 * s**2)) * (
+                1 + 2 * kappa_x * torch.cos(x_theta)
+            )
 
         if "osi" in variables:
             expected = expected / N_osi
 
+        expected = expected * gain
+
         torch.testing.assert_close(out, expected)
 
     def test_weights_sparse(self):
-        prob_kernel = nn.GaussianKernel(
-            torch.tensor([[100.0, 200.0], [200.0, 100.0]]), ["space", "cell_type"]
+        prob_kernel = nn.Gaussian(
+            nn.Matrix([[100.0, 200.0], [200.0, 100.0]], "cell_type"), "space"
         )
         with random.set_seed(0):
             model = nn.V1(
                 ["cell_type", "space"],
                 cell_types=(CellType.PYR, CellType.PV),
-                prob_kernel=prob_kernel,
+                prob_kernel={"space": prob_kernel},
             )
         x = neurons.as_grid(
             2, (4,), cell_types=(CellType.PYR, CellType.PV), space_extent=(400,)
@@ -305,7 +334,7 @@ class TestV1:
         assert (out_prob >= prob - 2.5 * sem).all()
         assert (out_prob <= prob + 2.5 * sem).all()
 
-        model.prob_kernel = None
+        model.prob_kernel = nn.Prod([])
         expected = model(x, output="weight", ndim=2, to_dataframe=False).dense()
         torch.testing.assert_close(out.mean(dim=0), expected, atol=1e-5, rtol=5e-2)
 
@@ -558,6 +587,49 @@ class TestV1:
                 f=nn.Match({"PV": nn.SSN(3)}, nn.SSN(2)),
             )
 
+    @pytest.mark.parametrize("variables", [["ori"], ["cell_type", "ori"]])
+    @pytest.mark.parametrize("kappa_x", [0.0, 0.5])
+    def test_forward_kappa_x(self, variables, kappa_x):
+        model = nn.V1(
+            variables, cell_types=(CellType.PYR, CellType.PV), kappa_x=kappa_x
+        )
+        state_dict = get_state_dict(model.n, None)
+        state_dict["gW"] *= 9
+        model.load_state_dict(state_dict, strict=False)
+        expected_model = copy.deepcopy(model)
+        expected_model.mode = "matrix"
+
+        x = neurons.as_grid(n=(model.n if "cell_type" in variables else 0), N_ori=360)
+        ndim = x.ndim
+
+        x = x.unsqueeze(0)  # (1, [2,] N_ori)
+        dh = torch.eye(x.shape[-1])  # (N_ori, N_ori)
+        if "cell_type" in variables:
+            dh = dh.unsqueeze(1)  # (N_ori, 1, N_ori)
+            dh = torch.cat([dh, torch.zeros_like(dh)], dim=1)  # (N_ori, 2, N_ori)
+        x["dh"] = dh  # (N_ori, [2,] N_ori)
+        x["rel_ori"] = x.apply(
+            perturbation.abs_relative_ori, dim=range(1, x.ndim), keepdim=True
+        )
+
+        with torch.no_grad():
+            out = model(x, ndim=ndim, to_dataframe="pandas")
+            expected = expected_model(x, ndim=ndim, to_dataframe="pandas")
+
+        # check that the two methods are different
+        assert (out["dr"] != expected["dr"]).any()
+
+        bins = np.arange(1, 90.1, 2)
+        out["rel_ori"] = pd.cut(out["rel_ori"], bins=bins, right=False)
+        expected["rel_ori"] = pd.cut(expected["rel_ori"], bins=bins, right=False)
+        by = ["cell_type", "rel_ori"] if "cell_type" in variables else ["rel_ori"]
+        out = out.query("dh == 0").groupby(by, observed=True)["dr"].mean()
+        expected = expected.query("dh == 0").groupby(by, observed=True)["dr"].mean()
+
+        np.testing.assert_allclose(
+            out, expected, rtol=1e-2, atol=expected.abs().max().item() * 2e-4
+        )
+
     @pytest.mark.parametrize("f", ["Identity", "Ricciardi", "Match"])
     @pytest.mark.parametrize("mode", ["analytical", "numerical"])
     @pytest.mark.parametrize("tau", [1.0, [1.0, 0.5]])
@@ -732,15 +804,17 @@ class TestV1:
                 configs=[
                     dict(N=10, cell_probs={"PYR": 1.0}, space=("uniform", 500.0)),
                     dict(N=10, cell_probs={"PV": 1.0}, space=("uniform", 500.0)),
+                    dict(N=10, space=("uniform", 500.0)),
                 ]
             ),
             seed=0,
+            N_instantiations=2,
         )
 
         dataloader = DataLoader(dataset, batch_size=len(dataset), collate_fn=collate_fn)
         x, kwargs = next(iter(dataloader))
-        assert x.shape == (1, 2, 200)
-        x_batch_shape = (1, 2)
+        assert x.shape == (2, 3, 200)
+        x_batch_shape = (2, 3)
 
         model.to(torch.double)
         batched_model.to(torch.double)
@@ -1097,7 +1171,7 @@ def test_cdim():
         space_extent=[2000.0] * 3,
         ori_extent=(-90.0, 90.0),
     )
-    out = _cdim(x, x.ndim)
+    out = _cdim(x, x.ndim, {"space", "ori"})
     expected = (-5, -4, -3, -2)
 
     assert out == expected
@@ -1112,7 +1186,7 @@ def test_cdim():
 )
 def test_cdim2(x, expected):
     x = frame.ParameterFrame({"space": periodic.tensor(x, extents=[(0.0, 3.0)])})
-    out = _cdim(x, x.ndim)
+    out = _cdim(x, x.ndim, {"space", "ori"})
     assert out == expected
 
 

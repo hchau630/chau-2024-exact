@@ -1,0 +1,42 @@
+tag_names = ["gain", "path", "loss"]
+
+[dataframes.__matrix__]
+gain = ["gain-1", { __format__ = "{KIND}_gain-{GAIN}" }]
+path = { __call__ = ["niarb.io", "iterdir"], path = { __format__ = "runs/resps_{KIND}_gain-{GAIN}" }, pattern = "*.pkl", indices = { __indices__ = { __environ__ = "INDICES" } }, stem = true }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path)" }
+func = ["niarb.io", "load_data"]
+paths = { __format__ = "runs/resps_{gain}/{path}.pkl", gain = { __eval__ = "gain" }, path = { __eval__ = "path" } }
+query = "distance > 25"
+cuts = { rel_ori = { __array__ = "-5:96:10" } }
+# rolling = { rel_ori = [{ __array__ = "0:90:10j" }, 25.0] }
+
+[[plots]]
+name = { __format__ = "compare_gain_{GAIN}_ori_ct2_{KIND}_stats_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "rel_ori"
+y = "dr"
+hue = "gain"
+hue_order = ["gain-1", { __format__ = "{KIND}_gain-{GAIN}" }]
+col = "cell_type"
+col_order = ["PYR", "PV"]
+stat = true
+stat_kws = { test = "ttest_rel" }
+errordim = "loss"
+# errorbar = "pi"
+errorbar = "sd"
+grid = "yzero"
+height = 4
+aspect = 1
+palette = ["#1F77B4", "#ED1C24"]
+legend_loc = "upper right"
+facet_kws = { sharey = false }
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+gain = "Gain"
+dr = '$\Delta$ response'
+rel_ori = '$\Delta$ ori. pref. (deg)'
+cell_type = "Cell type"

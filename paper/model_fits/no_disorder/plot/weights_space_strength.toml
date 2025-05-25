@@ -1,0 +1,40 @@
+keep_dataframe_idx = false
+tag_names = ["loss"]
+
+[dataframes]
+__ignore__ = ["path"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights_space_strength", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_dataframe"]
+filename = { __eval__ = "path" }
+evals = { W = "W.abs()" }
+
+[[plots]]
+name = { __format__ = "connection_strength_space_{INDICES}" }
+func = "relplot"
+kind = "line"
+x = "distance"
+y = "W"
+hue = "presynaptic_cell_type"
+hue_order = ["PYR", "PV"]
+col = "postsynaptic_cell_type"
+col_order = ["PYR", "PV"]
+grid = "yzero"
+height = 1.75
+color = "black"
+legend_loc = "upper right"
+legend_title = false
+facet_kws = { sharey = false, legend_out = false }
+errorbar = "sd"
+err_kws = { linewidth = 0.5 }
+
+[plots.mapping]
+W = "Connection strength"
+distance = 'Distance ($\mu$m)'
+postsynaptic_cell_type = "Postsynaptic"
+presynaptic_cell_type = "Presynaptic"
+

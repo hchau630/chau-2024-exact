@@ -14,29 +14,7 @@ import torch
 from niarb import nn, neurons, random
 from niarb.nn.modules.frame import ParameterFrame
 from niarb.zero_crossing import find_root
-
-CM = 1 / 2.54  # cm to inch
-CM_TO_PT = 28.3465  # cm to pt
-AXSIZE = (2.1 * CM, 2.1 * CM)
-CAXSIZE = (2.5 * CM, 2.1 * CM)
-FIGSIZE = (3.6 * CM, 3.4 * CM)
-CFIGSIZE = (4.3 * CM, 3.4 * CM)
-RECT = (
-    0.95 * CM / FIGSIZE[0],
-    0.9 * CM / FIGSIZE[1],
-    AXSIZE[0] / FIGSIZE[0],
-    AXSIZE[1] / FIGSIZE[1],
-)
-CRECT = (
-    0.95 * CM / CFIGSIZE[0],
-    0.9 * CM / CFIGSIZE[1],
-    CAXSIZE[0] / CFIGSIZE[0],
-    CAXSIZE[1] / CFIGSIZE[1],
-)
-GREY = "#666666"
-rcParams["font.size"] = 7.25  # default: 10 pts
-rcParams["axes.labelpad"] = 0.0  # default: 4.0 pts
-rcParams["axes.titlepad"] = 4.0  # default: 6.0 pts
+from mpl_config import FIGSIZE, CFIGSIZE, RECT, CRECT, GREY, set_rcParams
 
 
 def sample2x2(tr, det, rho, w00=None, scale=1.0):
@@ -1330,6 +1308,7 @@ def main():
         if getattr(args, k)
     }
 
+    set_rcParams()
     if args.plot == "space":
         fig = plot_space_phases(
             x, y, numerical=args.numerical, transpose=args.transpose, **kwargs

@@ -1,6 +1,7 @@
 import logging
 import functools
 from collections.abc import Callable
+from typing import Any
 
 import torch
 from torch import Tensor
@@ -147,6 +148,48 @@ def compute_gain(f, vf, create_graph=True, **kwargs):
         )
 
     return jac.diagonal() if jac.ndim == 2 else jac  # (N,) or ()
+
+
+# Compared to compute_gain, compute_nth_deriv is much faster for large inputs.
+# However compute_nth_deriv requires a bit of warmup time. Furthermore, it cannot
+# handle functions which output multiple elements (such as nn.Match).
+@torch.inference_mode(False)  # see comment in compute_gain
+def compute_nth_deriv(
+    f: Callable[[Tensor, *tuple[Tensor, ...]], Tensor],
+    vf: Tensor,
+    args: tuple[Tensor, ...] = (),
+    kwargs: dict[str, Any] | None = None,
+    n: int = 1,
+) -> Tensor:
+    """Compute the nth derivative of a scalar function.
+
+    Args:
+        f: A scalar function.
+        vf: Input tensors at which the derivative is evaluated.
+        args (optional): Additional tensors to pass to `f`. The leading dimensions of
+          each tensor must be broadcastable with `vf`. These tensors are vmapped over.
+        kwargs (optional): Optional arguments passed to `f`. Note that these arguments
+          are NOT vmapped over, unlike `args`.
+        n (optional): Order of the derivative.
+
+    Returns:
+        Derivative tensor with the same shape as `vf`.
+
+    """
+    if n < 1:
+        raise ValueError(f"n must be a positive integer, but {n=}.")
+
+    if kwargs is None:
+        kwargs = {}
+
+    for _ in range(n):
+        f = torch.func.grad(f)
+
+    for _ in range(vf.ndim):
+        f = torch.func.vmap(f)
+
+    args = [arg.broadcast_to((*vf.shape, *arg.shape[vf.ndim :])) for arg in args]
+    return f(vf, *args, **kwargs)
 
 
 def perturbed_steady_state_approx(

@@ -158,13 +158,3 @@ def sample_log_normal(W: torch.Tensor, std: float | torch.Tensor) -> torch.Tenso
     logger.debug(f"{W.shape=}")
 
     return W.sign() * random.log_normal(W, W * std, validate_args=False)
-
-
-def eigvals_dataframe(W):
-    eigvals = torch.linalg.eigvals(W)
-    return pd.DataFrame(
-        {
-            "real": eigvals.real.flatten().detach().cpu().numpy(),
-            "imag": eigvals.imag.flatten().detach().cpu().numpy(),
-        }
-    )

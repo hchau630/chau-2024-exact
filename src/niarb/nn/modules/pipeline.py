@@ -33,6 +33,9 @@ class Scaler(torch.nn.Module):
         torch.nn.init.constant_(self.scale, self.init_scale)
 
     def forward(self, x: ParameterFrame) -> ParameterFrame:
+        if self.var not in x:
+            return x
+
         x = x.copy()
         x[self.var] = self.scale * x[self.var]
         return x
@@ -54,10 +57,14 @@ class Pipeline(NamedSequential):
         model: torch.nn.Module,
         data: Iterable[pd.DataFrame] | None = None,
         scaler: torch.nn.Module | dict | None = None,
+        analysis: torch.nn.Module | None = None,
         y: str = "dr",
         yerr: str = "dr_se",
         estimator: str = "mean",
     ):
+        if data is not None and analysis is not None:
+            raise ValueError("`data` and `analysis` cannot both be provided.")
+
         if scaler is None:
             scaler = {}
 
@@ -81,6 +88,8 @@ class Pipeline(NamedSequential):
                 [TensorDataFrameAnalysis(x=df, y=y, estimator=estimator) for df in data]
             )
             modules["to_tensor"] = ToTensor(var=y)
+        elif analysis:
+            modules["analysis"] = analysis
 
         super().__init__(modules)
 

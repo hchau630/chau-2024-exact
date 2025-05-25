@@ -12,7 +12,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from niarb.special.resolvent import laplace_r
-from niarb.viz import figplot
+from niarb.viz import figplot, sample_df
 
 
 def integrand(d, sigma, r):
@@ -128,7 +128,9 @@ def main():
         choices=["bessel", "gaussian", "real_resp", "cplx_resp"],
         default="bessel",
     )
+    parser.add_argument("--query", "-q", type=str)
     parser.add_argument("--min-dist", "-m", type=float, default=0)
+    parser.add_argument("--max-dist", "-M", type=float, default=np.inf)
     parser.add_argument("--bootstraps", "-B", type=int)
     parser.add_argument("--binned", "-b", action="store_true")
     parser.add_argument("--bins", "-n", type=int)
@@ -138,45 +140,77 @@ def main():
     parser.add_argument("--ltheta", type=float, default=0)
     parser.add_argument("--ctheta", type=float, default=0)
     parser.add_argument("--ord", type=float, default=2)
+    parser.add_argument("-x", type=float, nargs=3)
+    parser.add_argument("--y-intercept", type=float, nargs="+")
+    parser.add_argument("--label", "-l", type=str, choices={"W", "G"}, default="W")
+    parser.add_argument("--ylabel", type=str, choices={"prod", "prob"}, default="prod")
     parser.add_argument("--output", "-o", type=Path)
     parser.add_argument("--show", action="store_true")
     args = parser.parse_args()
+
+    if args.y_intercept and len(args.y_intercept) != len(args.filenames):
+        raise ValueError(
+            "If --y-intercept is specified, it must have the same number of values as filenames"
+        )
+    elif not args.y_intercept:
+        args.y_intercept = [None] * len(args.filenames)
 
     # initialize kernel-specific parameters
     if args.kernel in {"bessel", "gaussian"}:
         p0 = [args.s0]
         bounds = ([0], [np.inf])
         fit_label = r"$W_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
-        y_label = r"E/IPSP $\times$ prob. (mV)"
+        # fit_label = r"$W_{\alpha \beta}(r)$"
+        if args.label == "G":
+            fit_label = f"$G_{args.d}(r; λ)$"
+        y_label = r"E/IPSP $\times$ density (mV)"
+        if args.ylabel == "prob":
+            y_label = "Conn. probability"
     elif args.kernel == "real_resp":
         p0 = [args.s0, args.s1, args.c]
         bounds = ([0, 0, -np.inf], [np.inf, np.inf, np.inf])
         fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     elif args.kernel == "cplx_resp":
         p0 = [args.s0, args.ltheta, args.ctheta]
         bounds = ([0, -np.pi, -np.pi], [np.inf, np.pi, np.pi])
         fit_label = r"$\tilde{L}_{\alpha \beta}(\mathbf{x} - \mathbf{y})$"
+        # fit_label = r"$\tilde{L}_{\alpha \beta}(r)$"
         y_label = "Response"
     else:
         raise ValueError(f"Unknown kernel: {args.kernel}")
     bounds = (bounds[0] + [0], bounds[1] + [np.inf])
 
     s, df, info = {}, {}, []
-    for filename in args.filenames:
+    for filename, y_intercept in zip(args.filenames, args.y_intercept, strict=True):
         data = np.loadtxt(filename, delimiter=",")
 
         if data.ndim != 2:
             raise ValueError("Data must be 2D")
 
-        if data.shape[-1] not in {2, 3}:
-            raise ValueError("Data must have 2 or 3 columns")
+        if data.shape[-1] not in {2, 3, 4}:
+            raise ValueError("Data must have 2, 3, or 4 columns")
 
+        yerr, ylow, yhigh = None, None, None
         if data.shape[-1] == 2:
             x, y = data.T
-            yerr = None
-        else:
+        elif data.shape[-1] == 3:
             x, y, yerr = data.T
+        else:
+            x, y, ylow, yhigh = data.T
+            yerr = (yhigh - ylow) / 2
+
+        mask = np.isfinite(y)
+        if yerr is not None:
+            mask &= np.isfinite(yerr)
+        if ylow is not None:
+            mask &= np.isfinite(ylow) & np.isfinite(yhigh)
+        x, y = x[mask], y[mask]
+        if yerr is not None:
+            yerr = yerr[mask]
+        if ylow is not None:
+            ylow, yhigh = ylow[mask], yhigh[mask]
 
         if args.binned:
             if yerr is not None:
@@ -186,10 +220,10 @@ def main():
                 if not np.allclose(np.diff(x, n=2), 0):
                     raise ValueError("Data must be binned")
             else:
-                df = pd.DataFrame({"x": x, "y": y})
-                df["x"] = pd.cut(df["x"], bins=args.bins)
-                df = df.groupby("x", as_index=False)["y"].mean()
-                x, y = pd.IntervalIndex(df["x"]).mid, df["y"]
+                sf = pd.DataFrame({"x": x, "y": y})
+                sf["x"] = pd.cut(sf["x"], bins=args.bins)
+                sf = sf.groupby("x", as_index=False)["y"].mean()
+                x, y = pd.IntervalIndex(sf["x"]).mid, sf["y"]
                 x, y = x.to_numpy(), y.to_numpy()
             binwidth = x[1] - x[0]
 
@@ -205,8 +239,8 @@ def main():
             if args.kernel != "gaussian":
                 kernel = partial(kernel, args.d)
 
-        # only fit to data where x >= min_dist
-        mask = x >= args.min_dist
+        # only fit to data where x >= min_dist and x <= max_dist
+        mask = (x >= args.min_dist) & (x <= args.max_dist)
 
         # initialize amplitude such that norm(kernel(x[mask], *p0)) == norm(y[mask])
         a = np.linalg.norm(y[mask], ord=args.ord) / np.linalg.norm(
@@ -237,8 +271,18 @@ def main():
         print(info[-1])
 
         s[filename.stem] = (popt[0], pcov[0, 0] ** 0.5)
-        df[(filename.stem, "data")] = pd.DataFrame({"x": x, "y": y})
-        df[(filename.stem, fit_label)] = pd.DataFrame({"x": x, "y": kernel(x, *popt)})
+        scale = y_intercept / kernel(0.0, *popt) if y_intercept else 1.0
+        df[(filename.stem, "data")] = pd.DataFrame({"x": x, "y": scale * y})
+        if yerr is not None:
+            df[(filename.stem, "data")]["yerr"] = scale * yerr
+        if ylow is not None:
+            df[(filename.stem, "data")]["ylow"] = scale * ylow
+        if yhigh is not None:
+            df[(filename.stem, "data")]["yhigh"] = scale * yhigh
+        x_ = x if args.x is None else np.arange(*args.x)
+        df[(filename.stem, fit_label)] = pd.DataFrame(
+            {"x": x_, "y": scale * kernel(x_, *popt)}
+        )
 
     s_gmean = math.prod(si[0] for si in s.values()) ** (1 / len(s))
     s_gmean_err = sum((si[1] / si[0]) ** 2 for si in s.values()) ** 0.5 * s_gmean
@@ -246,8 +290,16 @@ def main():
     print(info[-1])
 
     df = pd.concat(df, names=["filename", "kind"]).reset_index(level=[0, 1])
-    df["filename"] = df["filename"].replace({"EI": r"I $\to$ E", "IE": r"E $\to$ I"})
-    # print(df)
+    df["filename"] = df["filename"].replace(
+        {"EE": r"E → E", "EI": r"I → E", "IE": r"E → I"}
+    )
+    df = df.query(args.query) if args.query else df
+
+    estimator = "mean" if ylow is None else "median"
+    errorbar = "se" if ylow is None else ("pi", 100)
+    if yerr is not None:
+        yerr_name = "yerr" if ylow is None else ("ylow", "yhigh")
+        df = sample_df(df, estimator=estimator, errorbar=errorbar, yerr=yerr_name)
 
     g = figplot(
         df,
@@ -264,6 +316,8 @@ def main():
         aspect=1.25,
         mapping={"x": "Distance (μm)", "y": y_label},
         grid="yzero",
+        estimator=estimator,
+        errorbar=errorbar,
     )
 
     # get rid of legend subtitles, very ugly

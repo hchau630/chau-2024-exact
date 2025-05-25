@@ -97,6 +97,7 @@ class TestDataset:
             "N",
             "density",
             "min_distance_to_ensemble",
+            "instance_idx",
         }
         assert x.shape == (4, 500)
         assert x.data["space"].shape == (1, 500, 1)
@@ -124,6 +125,8 @@ class TestDataset:
                 ).bool()
             assert (expected_ & expected == expected_).all()  # check subsample
             assert (xi["mask"] == expected_).all()
+        assert x.data["instance_idx"].shape == (1, 1)
+        assert x.data["instance_idx"].item() == 0
 
     def test_getitem_grid(self, grid_dset):
         x, _, kwargs = grid_dset[0]

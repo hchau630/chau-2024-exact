@@ -1,0 +1,72 @@
+batch_size = 1
+dataset = { __ref__ = ["fit.toml", "validation_dataset"] }
+
+[pipeline.model]
+__ref__ = ["fit.toml", "validation_pipeline", "model"]
+dense = false
+monotonic_strength = true
+keep_monotonic_norm = true
+monotonic_norm_ord = 1.5
+simulation_kwargs = { options = { max_num_steps = 1000 }, dx_rtol = 5e-5 }
+
+[pipeline.model.prob_kernel.cell_type]
+__call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
+# Calculated based on Figure S1A of Campagnola et al. (2022) and inhibitory subtype
+# ratios based on Figure 1C of Billeh et al. (2020).
+matrix = [
+    [0.11, 0.331],
+    [0.578, 0.284],
+]
+
+[pipeline.model.prob_kernel.space]
+__call__ = ["niarb.nn", "Laplace"]
+x_keys = ["space"]
+d = 0
+normalize = "origin"
+
+[pipeline.model.prob_kernel.space.sigma]
+__call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
+# Fit to Rossi et al. (2020) with d = 0 kernel with max distance 300 μm:
+# - E -> E: sigma = 110.6 μm
+# - I -> E: sigma = 73.1 μm
+# Assume E -> I same width as I -> E, I -> I same with as E -> E
+matrix = [
+    [110.6, 73.1],
+    [73.1, 110.6],
+]
+
+[pipeline.model.prob_kernel.ori]
+__call__ = ["niarb.nn", "Tuning"]
+x_keys = ["ori"]
+
+[pipeline.model.prob_kernel.ori.kappa]
+__call__ = ["niarb.nn", "Matrix"]
+x_keys = ["cell_type"]
+matrix = [
+    [0.198, 0.0],
+    [0.0, 0.0],
+]
+
+[state_dict]
+__call__ = ["niarb.io", "load_state_dict"]
+modify = "gW"
+mode = "scale"
+value = { __call__ = ["builtins", "float", { __environ__ = "GAIN" }] }
+
+[state_dict.path]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }
+
+[out]
+__format__ = "runs/resps_gain-{GAIN}/{filename}.pkl"
+
+[out.filename]
+__call__ = ["niarb.io", "iterdir"]
+path = "fits"
+pattern = "*.pt"
+stem = true
+indices = { __call__ = ["builtins", "int", { __environ__ = "SLURM_ARRAY_TASK_ID" }] }

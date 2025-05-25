@@ -1,0 +1,45 @@
+# file_type = "png"
+# dpi = 700
+keep_dataframe_idx = false
+tag_names = ["loss"]
+
+[dataframes]
+__ignore__ = ["path"]
+
+[dataframes.__matrix__]
+path = { __call__ = ["niarb.io", "iterdir"], path = "runs/weights_eigvals", pattern = "*.feather", indices = { __indices__ = { __environ__ = "INDICES" } } }
+
+[[dataframes.__include__]]
+evals = { "norm" = "(real**2 + imag**2)**0.5" }
+loss = { __eval__ = "float(path.stem)" }
+func = ["niarb.io", "load_dataframe"]
+filename = { __eval__ = "path" }
+
+# optional plot for showing all eigenvalues
+# [[plots]]
+# name = { __format__ = "eigvals_{INDICES}" }
+# func = "relplot"
+# x = "real"
+# y = "imag"
+# col = "loss"
+# col_wrap = 10
+# height = 1.75
+# # aspect = 1.25
+# s = 1.0
+# linewidth = 0
+# # refline = { x = -1.0, y = 1.0 }
+# mapping = { loss = "Loss" }
+
+[[plots]]
+xlim = [0.0, { __const__ = "None" }]
+groupby_cols = "loss"
+groupby_agg = { radius = ["norm", "max"] }
+name = { __format__ = "spectral_radius_{INDICES}" }
+func = "displot"
+x = "radius"
+height = 2
+aspect = 1.25
+# element = "step"
+# fill = false
+refline = { x = 1.0 }
+mapping = { "radius" = "Spectral radius" }

@@ -3,17 +3,7 @@ import numpy as np
 import pytest
 
 from niarb.special.resolvent import laplace_r
-from niarb.zero_crossing import bisect, find_root
-
-
-@pytest.mark.parametrize("dtype", [torch.float, torch.double])
-def test_bisect(dtype):
-    func = torch.cos
-    a = torch.tensor(0.0, dtype=dtype)
-    b = torch.tensor([torch.pi / 4, 3 * torch.pi / 4], dtype=dtype)
-    out = bisect(func, a, b)
-    expected = torch.tensor([torch.nan, torch.pi / 2], dtype=dtype)
-    torch.testing.assert_close(out, expected, equal_nan=True)
+from niarb.zero_crossing import find_root, find_n_crossings
 
 
 @pytest.mark.parametrize("d", list(range(1, 4)))
@@ -68,3 +58,27 @@ def test_find_root(d, n):
             out, l0, l1, z = out[:, 2:], l0[2:], l1[2:], z[:, 2:]
         l0, l1, out, z = map(torch.from_numpy, (l0, l1, out, z))
         torch.testing.assert_close(laplace_r(d, l1, out) / laplace_r(d, l0, out), z)
+
+
+def test_find_n_crossings():
+    x = np.array([0.0, 1.0, 2.0])
+    y = np.array(
+        [
+            [0.0, 1.0, 0.0],
+            [-1.0, 0.0, -1.0],
+            [1.0, 0.0, 1.0],
+            [1.0, 0.0, -1.0],
+            [-1.0, 0.0, 1.0],
+            [1.0, -1.0, 0.0],
+            [1.0, -1.0, 1.0],
+            [0.0, 1.0, -1.0],
+        ]
+    )
+    expected = np.array(
+        [
+            [np.nan, np.nan, np.nan, 1.5, 1.5, 0.5, 0.5, 1.5],
+            [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 1.5, np.nan],
+        ]
+    )
+    out = find_n_crossings(x, y, n=2)
+    np.testing.assert_allclose(out, expected, equal_nan=True)
