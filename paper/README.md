@@ -38,9 +38,6 @@
 | S8A (left) | `python paper/plot_gain.py -b 0.5 -s 968 -y 1.55 -o paper/figures/supp/S8_a.pdf` |
 | S8B (left) | `python paper/plot_gain.py -b 0.5 -k 0.5 -y 1.55 -o paper/figures/supp/S8_b.pdf` |
 | S8C (left) | `python paper/plot_gain.py -b 0.5 -s 968 -k 0.5 -y 1.55 -o paper/figures/supp/S8_c.pdf` |
-| S8A alt (left) | `python paper/plot_gain.py -b 0.75 -s 968 -y 1.3 -o paper/figures/supp/S8_a_alt.pdf` |
-| S8B alt (left) | `python paper/plot_gain.py -b 0.75 -k 0.5 -y 1.3 -o paper/figures/supp/S8_b_alt.pdf` |
-| S8C alt (left) | `python paper/plot_gain.py -b 0.75 -s 968 -k 0.5 -y 1.3 -o paper/figures/supp/S8_c_alt.pdf` |
 | S8A-C (center, right), S8D | See `paper/model_fits/no_disorder/README.md` |
 
 # Additional commands
