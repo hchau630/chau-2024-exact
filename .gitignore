@@ -1,6 +1,4 @@
 # some data to exclude (not used in paper)
-paper/rossi_data/raw
-paper/rossi_data/L23
 paper/oldenburg_data
 
 # don't include slurm log files that I have
