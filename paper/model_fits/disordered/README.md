@@ -1,5 +1,5 @@
 # Commands for reproducing Figure S7
-To reproduce the plots, first download model simulation data `runs.zip` from https://www.dropbox.com/scl/fo/c8n8gaacttpdwgn7biwh3/AI3RDU23h1HEgZb235SBOd4?rlkey=dja3b18xerxps8i0cgnpnjmdk&st=2i1e841m&dl=0. After unzipping `runs.zip`, move the resulting `runs` directory into this directory. You can then reproduce specific plots according to the following table of commands.
+To reproduce the plots, first download model simulation data `runs.zip` from https://www.dropbox.com/scl/fi/5npmaeo3ytgwdtofgwvlu/runs.zip?rlkey=17y7mn17yu455br4frfpmic38&st=4mith0xj&dl=0. After unzipping `runs.zip`, move the resulting `runs` directory into this directory. You can then reproduce specific plots according to the following table of commands.
 
 | Figure | Filename | Command (run in the current directory) |
 |--------|----------| -------------------------------------- |
