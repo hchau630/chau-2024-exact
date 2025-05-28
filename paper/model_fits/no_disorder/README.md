@@ -1,5 +1,5 @@
 # Commands for reproducing Figure 6, S6, and S8
-Figure 6 and S6 subplots are organized differently than those of Figures 1-5. Below is a table of which figure file each subplot corresponds to.
+To reproduce the plots, first download model simulation data `runs.zip` from https://www.dropbox.com/scl/fo/vsmc1ibixtftyrbev93rx/AJm5_TzwHeNvFSdRljq6cxw?rlkey=v7vzl9qpmxja4pipue6r29dfy&st=nv3aodip&dl=0. After unzipping `runs.zip`, move the resulting `runs` directory into this directory. You can then reproduce specific plots according to the following table of commands.
 
 | Figure | Filename | Command (run in the current directory) |
 |--------|----------| -------------------------------------- |
